@@ -1,4 +1,4 @@
-from core.word_entry import WordEntry
+from src.core.word_entry import WordEntry
 
 class WordEntryManager:
     def __init__(self):
