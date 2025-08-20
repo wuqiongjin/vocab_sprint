@@ -49,7 +49,7 @@ class Logger:
 
         # create colored formatter for console
         colored_formatter = ColoredFormatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "[%(asctime)s] | [%(name)s] | [%(levelname)s] | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
 

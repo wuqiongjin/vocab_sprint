@@ -1,10 +1,14 @@
-from .word_entry import WordEntry
-from utils.database_manager import DatabaseManager
+from src.core.word_entry import WordEntry
+from src.utils.database_manager import DatabaseManager, DataType
 
 class WordEntryManager:
-    def __init__(self, database_path: str, table_name: str):
-        self.database_path = database_path
-        self.database_manager = DatabaseManager(database_path)
+    def __init__(self, database_manager: DatabaseManager, table_name: str):
+        self.database_manager = database_manager
+        # check table exist
+        if not self.database_manager.check_table_exist(table_name):
+            raise Exception(f"table {table_name} not exist")
+
+        # load data from database
         self.word_dict = self.database_manager.export_table_data(table_name)
 
     def add_word_entry(self, word_entry: WordEntry):
@@ -31,7 +35,24 @@ class WordEntryManager:
 
 # # test
 # if __name__ == "__main__":
-#     word_entry_manager = WordEntryManager("../../resource/vacab_sprint_test.db", "WordEntry")
+#     database_manager = DatabaseManager("./test.db", True)
+#     colmns = [
+#         ("word", DataType.TEXT),
+#         ("phonetic_UK", DataType.TEXT),
+#         ("phonetic_US", DataType.TEXT),
+#         ("interp_Noun", DataType.TEXT),
+#         ("interp_Verb", DataType.TEXT),
+#         ("interp_Adj", DataType.TEXT),
+#         ("interp_Adv", DataType.TEXT),
+#     ]
+#     print(f"create status: {database_manager.create_table('WordEntry', colmns)}")
+#     database_manager.insert_data("WordEntry", {
+#         "word": "goods",
+#         "phonetic_UK": "gʊdz",
+#         "phonetic_US": "ɡʊdz",
+#         "interp_Noun": "商品",
+#     })
+#     word_entry_manager = WordEntryManager(database_manager, "WordEntry")
 #     print(word_entry_manager.get_all_words())
 #     print(word_entry_manager.get_all_word_entries())
 #     print(word_entry_manager.get_word_entry("hello"))

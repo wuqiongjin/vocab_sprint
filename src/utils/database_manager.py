@@ -18,22 +18,64 @@ class DataType(Enum):
     NUMERIC = "NUMERIC"
 
 class DatabaseManager:
-    def __init__(self, database_path):
-        if not os.path.exists(database_path):
-            logger.INFO(f"Database file not found: {database_path}, creating...")
-        self.conn = sqlite3.connect(database_path)
+    def __init__(self, database_path: str, create_if_not_exist=False):
+        self.database_path = database_path
+        self.create_if_not_exist = create_if_not_exist
+        self.conn = None
+        self.cursor = None
+        self.__connect()  # connect to database
+
+    def __connect(self):
+        if not os.path.exists(self.database_path):
+            if not self.create_if_not_exist:
+                raise FileNotFoundError(f"Database file not found: {self.database_path}")
+            else:
+                logger.INFO(f"Database file not found, creating new database: {self.database_path}")
+                os.makedirs(os.path.dirname(self.database_path), exist_ok=True)
+
+        self.conn = sqlite3.connect(self.database_path)
         self.cursor = self.conn.cursor()
+        logger.INFO(f"Connected to database: {self.database_path}")
 
     def __del__(self):
-        self.close()
+        try:
+            self.close()
+        except:
+            Logger.ERROR("Error while closing database connection.")
+            pass  # ignore any exception in destructor
 
-    def create_table(self, table_name: str, columns: list[tuple[str, DataType]]):
-        # columns is a list of tuples, each tuple contains (column name, data type)
+    def create_table(self, table_name: str, columns: list[tuple[str, DataType]]) -> bool:
+        """
+        Args:
+            table_name: Name of the table to create.
+            columns: columns: List of column definitions, each as a tuple of (column_name, DataType).
+        Returns:
+            True if the table was created, False if it already exists.
+        Examples:
+            >>> db.create_table("users", [("id", DataType.INTEGER), ("name", DataType.TEXT)])
+            True
+        """
+        if self.check_table_exist(table_name):
+            logger.INFO(f"Table '{table_name}' already exists, skipping creation")
+            return False
+        
         column_definitions = ', '.join([f"{col_name} {data_type.value}" for col_name, data_type in columns])
-        sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({column_definitions})"
-        logger.DEBUG(f"Creating table: {sql}")
+        sql = f"CREATE TABLE {table_name} ({column_definitions})"
         self.cursor.execute(sql)
         self.conn.commit()
+        logger.INFO(f"Created new table: {table_name}")
+        return True
+
+    def check_table_exist(self, table_name: str) -> bool:
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        return self.cursor.fetchone() is not None
+    
+    def check_column_exist(self, table_name: str, column_name: str) -> bool:
+        if not self.check_table_exist(table_name):
+            raise ValueError(f"Table '{table_name}' does not exist, can not check column '{column_name}'")
+        self.cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in self.cursor.fetchall()]
+        return column_name in columns
 
     def insert_data(self, table_name: str, data: dict):
         if not data:
@@ -41,8 +83,7 @@ class DatabaseManager:
             return
 
         # verify table exists
-        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not self.cursor.fetchone():
+        if not self.check_table_exist(table_name):
             raise ValueError(f"Table '{table_name}' does not exist")
 
         # get table columns
@@ -82,18 +123,28 @@ class DatabaseManager:
             data[row[0]] = row[:]
         return data
 
+    def is_connected(self) -> bool:
+        return self.conn is not None
+    
+    def reconnect(self):
+        self.close()
+        self._connect()
+
     def close(self):
-        if self.cursor:
+        if hasattr(self, "cursor") and self.cursor:
             self.cursor.close()
-        if self.conn:
+            self.cursor = None
+        if hasattr(self, "conn") and self.conn:
             self.conn.close()
+            self.conn = None
+        logger.INFO("Database connection closed")
 
 
 
 # # 测试
 # if __name__ == "__main__":
-#     # test create table, insert data, export table data
-#     database_manager = DatabaseManager("./test.db")
+#  #   # test create table, insert data, export table data
+#     database_manager = DatabaseManager("./test.db", True)
 #     colmns = [
 #         ("word", DataType.TEXT),
 #         ("phonetic_UK", DataType.TEXT),
@@ -118,33 +169,33 @@ class DatabaseManager:
     # test insert WordEntry to database
 #     from dataclasses import dataclass
 
-#     @dataclass
-#     class WordEntry:
-#         word: str
-#         phonetic_UK: str
-#         phonetic_US: str
-#         interp_Noun: str = ""
-#         interp_Verb: str = ""
-#         interp_Adj: str = ""
-#         interp_Adv: str = ""
-#         interp_Pron: str = ""
-#         interp_Prep: str = ""
-#         interp_Conj: str = ""
-#         interp_Intj: str = ""
-#         interp_Art: str = ""
-#         interp_Det: str = ""
-#         interp_Num: str = ""
-#         interp_Aux: str = ""
-#         interp_Others: str = ""
+    # @dataclass
+    # class WordEntry:
+    #     word: str
+    #     phonetic_UK: str
+    #     phonetic_US: str
+    #     interp_Noun: str = ""
+    #     interp_Verb: str = ""
+    #     interp_Adj: str = ""
+    #     interp_Adv: str = ""
+    #     interp_Pron: str = ""
+    #     interp_Prep: str = ""
+    #     interp_Conj: str = ""
+    #     interp_Intj: str = ""
+    #     interp_Art: str = ""
+    #     interp_Det: str = ""
+    #     interp_Num: str = ""
+    #     interp_Aux: str = ""
+    #     interp_Others: str = ""
 
-#     database_manager.insert_data("WordEntry", WordEntry(
-#         word="hello2",
-#         phonetic_UK="həˈləʊ",
-#         phonetic_US="həˈləʊ",
-#         interp_Noun="a greeting",
-#         interp_Verb="to greet",
-#         interp_Adj="friendly",
-#         interp_Adv="gently",
-#     ).__dict__)
+    # database_manager.insert_data("WordEntry", WordEntry(
+    #     word="hello2",
+    #     phonetic_UK="həˈləʊ",
+    #     phonetic_US="həˈləʊ",
+    #     interp_Noun="a greeting",
+    #     interp_Verb="to greet",
+    #     interp_Adj="friendly",
+    #     interp_Adv="gently",
+    # ).__dict__)
 
-#     print(database_manager.export_table_data("WordEntry"))
+    # print(database_manager.export_table_data("WordEntry"))
