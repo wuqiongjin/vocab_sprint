@@ -1,5 +1,8 @@
 from src.core.word_entry import WordEntry
 from src.utils.database_manager import DatabaseManager, DataType
+from src.utils.logger import Logger
+
+logger = Logger(__name__)
 
 class WordEntryManager:
     def __init__(self, database_manager: DatabaseManager, table_name: str):
