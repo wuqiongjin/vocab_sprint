@@ -1,12 +1,13 @@
 import os
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, List, Union, Dict, Any, TypedDict
 
 from src.utils.exceptions import (
     ErrorCode, DatabaseError, DatabaseConnectionError, TableNotFoundError, 
-    ColumnNotFoundError, InvalidTableStructureError, ValidationError
+    ColumnNotFoundError, ValidationError, NoRowsAffectedError
 )
 from src.utils.logger import Logger
 
@@ -47,6 +48,36 @@ class TableConfig(TypedDict, total=False):
     unique_keys: List[Union[str, List[str]]]
     default_values: Dict[str, Any]
     check_constraints: List[tuple[str, str]]
+
+class OrderDirection(Enum):
+    ASC = "ASC"
+    DESC = "DESC"
+
+@dataclass
+class JoinClause:
+    table: str
+    on: str
+    join_type: str = "INNER"  # INNER, LEFT, RIGHT, FULL
+
+@dataclass
+class SelectQuery:
+    """Query builder for select operations"""
+    table: str
+    columns: Optional[List[str]] = None
+    where_clause: Optional[str] = None              # where = "age > ? AND status = ?"
+    where_args: Optional[tuple] = None              # where_args = (25, "active")
+    order_by: Optional[str] = None
+    order_direction: OrderDirection = OrderDirection.ASC
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    group_by: Optional[str] = None
+    having: Optional[str] = None
+    joins: Optional[List[JoinClause]] = None
+
+    def __post_init__(self):
+        """Basic validation"""
+        if not self.table or not self.table.strip():
+            raise ValidationError("Table name cannot be empty", {"parameter": "table"})
 
 class DatabaseManager:
     def __init__(self, database_path: str, create_if_not_exist=False):
@@ -160,35 +191,19 @@ class DatabaseManager:
         # get all column names
         column_names = [col_name for col_name, _ in columns]
 
-        # verify table configuration's attributes are valid in terms of columns
-        def validate_columns(columns_to_check, param_name):
-            if not columns_to_check:
-                return
-
-            invalid_columns = [col for col in columns_to_check if col not in column_names]
-            if invalid_columns:
-                raise ValidationError(
-                    f"Invalid columns in {param_name}",
-                    {
-                        "invalid_columns": invalid_columns,
-                        "valid_columns": column_names,
-                        "parameter": param_name
-                    }
-                )
-
         # validate primary_key values
         if primary_key:
             if isinstance(primary_key, list):
-                validate_columns(primary_key, "primary_key")
+                self.check_columns_valid(table_name, primary_key, column_names)
             else:
-                validate_columns([primary_key], "primary_key")
+                self.check_columns_valid(table_name, [primary_key], column_names)
 
         # validate foreign_keys values
         fk_columns = [fk[0] for fk in foreign_keys]
-        validate_columns(fk_columns, "foreign_keys")
+        self.check_columns_valid(table_name, fk_columns, column_names)
 
         # validate not_null_keys values
-        validate_columns(not_null_keys, "not_null_keys")
+        self.check_columns_valid(table_name, not_null_keys, column_names)
         
         # validate unique_keys values (composite keys are allowed. It should be flattened first!)
         flat_unique_keys = []
@@ -197,14 +212,14 @@ class DatabaseManager:
                 flat_unique_keys.extend(key)
             else:
                 flat_unique_keys.append(key)
-        validate_columns(flat_unique_keys, "unique_keys")
+        self.check_columns_valid(table_name, flat_unique_keys, column_names)
 
         # validate default values
-        validate_columns(default_values.keys(), "default_values")
+        self.check_columns_valid(table_name, default_values.keys(), column_names)
 
         # validate check_constraints values
         check_columns = [cc[0] for cc in check_constraints]
-        validate_columns(check_columns, "check_constraints")
+        self.check_columns_valid(table_name, check_columns, column_names)
 
 
         # column definitions (contains NOT NULL constraint and default value)
@@ -293,30 +308,44 @@ class DatabaseManager:
                 e
             )
 
-    def check_column_exist(self, table_name: str, column_name: str) -> bool:
+    def check_columns_valid(self, table_name: str, columns_to_check: list[str],
+                            table_columns: Optional[list[str]] = None) -> bool:
         """
-        Check if a column exists in a table.
+        check if all the data keys are valid for the table
+
+        Args:
+            table_name: Name of the table to check. (the table may not exist yet!)
+            columns_to_check: List of column names to check.
+            table_columns: List of column names in the table. If not provided, it will be fetched from the database.
+
+        Returns:
+            bool: True if all the data keys are valid, False otherwise
 
         Raises:
-            TableNotFoundError: If table doesn't exist.
             DatabaseError: If database query fails.
+            TableNotFoundError: If table doesn't exist.
+            ValidationError: If data is invalid.
         """
-        try:
-            if not self.check_table_exist(table_name):
-                raise TableNotFoundError(table_name)
+        if not columns_to_check:
+            logger.DEBUG(f"No columns to check for table: {table_name}")
+            return True
 
-            self.cursor.execute(f"PRAGMA table_info({table_name})")
-            columns = [row[1] for row in self.cursor.fetchall()]
-            return column_name in columns
+        # get all the table columns
+        if not table_columns:
+            table_columns = [col["name"] for col in self.get_table_columns(table_name)]
 
-        except sqlite3.Error as e:
-            raise DatabaseError(
-                f"Failed to check column existence: {str(e)}",
-                ErrorCode.DATABASE_ERROR,
-                "check_column_exist",
-                {"table_name": table_name, "column_name": column_name},
-                e
+        invalid_columns = [col for col in columns_to_check if col not in table_columns]
+        if invalid_columns:
+            raise ColumnNotFoundError(
+                table_name,
+                invalid_columns,
+                {
+                    "table_name": table_name,
+                    "invalid_columns": invalid_columns,
+                    "valid_columns": table_columns
+                }
             )
+        return invalid_columns == []
 
     def get_table_columns(self, table_name: str) -> List[Dict[str, Any]]:
         """
@@ -355,7 +384,6 @@ class DatabaseManager:
                 e
             )
 
-
     def insert_data(self, table_name: str, data: dict) -> int:
         """
         Insert data into a table.
@@ -372,33 +400,22 @@ class DatabaseManager:
             raise ValidationError("No data to insert", 
                                 {"table_name": table_name})
 
+        # verify table exists
+        if not self.check_table_exist(table_name):
+            raise TableNotFoundError(table_name)
+
+        # check columns are valid
+        if not self.check_columns_valid(table_name, data):
+            raise ValidationError("Invalid data", {"table_name": table_name})
+
         try:
-            # verify table exists
-            if not self.check_table_exist(table_name):
-                raise TableNotFoundError(table_name)
-
-            # get table columns
-            table_columns = [col["name"] for col in self.get_table_columns(table_name)]
-
-            # verify if the columns in the data are valid
-            invalid_columns = [col for col in data.keys() if col not in table_columns]
-            if invalid_columns:
-                raise ValidationError(
-                    "Invalid columns provided for insertion",
-                    {
-                        "table_name": table_name,
-                        "invalid_columns": invalid_columns,
-                        "valid_columns": table_columns
-                    }
-                )
-
             # use placeholder and parameterized query
             columns = ', '.join(data.keys())
             placeholders = ', '.join(['?' for _ in data])
             values = list(data.values())
 
             query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            logger.DEBUG(f"Inserting data: {query}")
+            logger.DEBUG(f"Inserting data: {query} with values {values}")
 
             self.cursor.execute(query, values)
             self.conn.commit()
@@ -416,7 +433,8 @@ class DatabaseManager:
                 e
             )
 
-    def update_data(self, table_name: str, data: dict, where_clause: str, where_args: tuple = None) -> int:
+    def update_data(self, table_name: str, data: dict, where_clause: str, where_args: tuple = None,
+                    raise_if_no_rows: bool = False) -> int:
         """
         Update data in a table.
 
@@ -433,6 +451,7 @@ class DatabaseManager:
             TableNotFoundError: If table doesn't exist.
             ValidationError: If data or where clause is invalid.
             DatabaseError: If update fails.
+            NoRowsAffectedError: If no rows are updated and raise_if_no_rows is True.
         """
         if not data:
             raise ValidationError("No data to update", 
@@ -442,26 +461,15 @@ class DatabaseManager:
             raise ValidationError("Where clause is required for update", 
                                 {"table_name": table_name})
 
+        # verify table exists
+        if not self.check_table_exist(table_name):
+            raise TableNotFoundError(table_name)
+
+        # check columns are valid
+        if not self.check_columns_valid(table_name, data):
+            raise ValidationError("Invalid data", {"table_name": table_name})
+
         try:
-            # verify table exists
-            if not self.check_table_exist(table_name):
-                raise TableNotFoundError(table_name)
-
-            # get table columns
-            table_columns = [col["name"] for col in self.get_table_columns(table_name)]
-
-            # verify if the columns in the data are valid
-            invalid_columns = [col for col in data.keys() if col not in table_columns]
-            if invalid_columns:
-                raise ValidationError(
-                    "Invalid columns provided for update",
-                    {
-                        "table_name": table_name,
-                        "invalid_columns": invalid_columns,
-                        "valid_columns": table_columns
-                    }
-                )
-
             # build SET clause
             set_clause = ', '.join([f"{col} = ?" for col in data.keys()])
             values = list(data.values())
@@ -471,12 +479,19 @@ class DatabaseManager:
                 values.extend(where_args)
 
             query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
-            logger.DEBUG(f"Updating data: {query}")
+            logger.DEBUG(f"Updating data: {query} with values {values}")
 
             self.cursor.execute(query, values)
             self.conn.commit()
             affected_rows = self.cursor.rowcount
             logger.INFO(f"Successfully updated {affected_rows} rows in {table_name}")
+
+            # Check if no rows were updated and raise error if requested
+            if affected_rows == 0 and raise_if_no_rows:
+                raise NoRowsAffectedError(
+                    "No rows were updated. Possible reasons: no matching records or identical data.",
+                    {"table_name": table_name, "where_clause": where_clause, "where_args": where_args}
+                )
 
             return affected_rows
 
@@ -489,7 +504,8 @@ class DatabaseManager:
                 e
             )
 
-    def delete_data(self, table_name: str, where_clause: str, where_args: tuple = None) -> int:
+    def delete_data(self, table_name: str, where_clause: str, where_args: tuple = None,
+                    raise_if_no_rows: bool = False) -> int:
         """
         Delete data from a table.
 
@@ -505,6 +521,7 @@ class DatabaseManager:
             TableNotFoundError: If table doesn't exist.
             ValidationError: If where clause is invalid.
             DatabaseError: If deletion fails.
+            NoRowsAffectedError: If no rows are updated and raise_if_no_rows is True.
         """
         if not where_clause:
             raise ValidationError("Where clause is required for delete", 
@@ -527,6 +544,13 @@ class DatabaseManager:
             affected_rows = self.cursor.rowcount
             logger.INFO(f"Successfully deleted {affected_rows} rows from {table_name}")
 
+            # Check if no rows were deleted and raise error if requested
+            if affected_rows == 0 and raise_if_no_rows:
+                raise NoRowsAffectedError(
+                    "No rows were deleted. Possible reasons: no matching records or identical data.",
+                    {"table_name": table_name, "where_clause": where_clause, "where_args": where_args}
+                )
+
             return affected_rows
 
         except sqlite3.Error as e:
@@ -537,6 +561,122 @@ class DatabaseManager:
                 {"table_name": table_name, "where_clause": where_clause},
                 e
             )
+
+    def select_data(self, query: SelectQuery) -> List[Dict]:
+        """
+        select data from a table
+
+        Args:
+            query: SelectQuery contains all the information needed to select data from a table
+
+        Returns:
+            List of dictionaries representing the selected rows.
+
+        Raises:
+            TableNotFoundError: If table doesn't exist.
+            DatabaseError: If selection fails.
+        """
+        try:
+            # verify table exists
+            if not self.check_table_exist(query.table):
+                raise TableNotFoundError(query.table)
+
+            # build SELECT clause
+            select_clause = '*'
+            if query.columns:
+                select_clause = ', '.join(query.columns)
+
+            # build base query
+            sql_parts = [f"SELECT {select_clause} FROM {query.table}"]
+
+            # add JOIN clauses
+            if query.joins:
+                for join in query.joins:
+                    sql_parts.append(f"{join.join_type} JOIN {join.table} ON {join.on}")
+
+            # add WHERE clause
+            if query.where_clause:
+                sql_parts.append(f"WHERE {query.where_clause}")
+
+            # add GROUP BY clause
+            if query.group_by:
+                sql_parts.append(f"GROUP BY {query.group_by}")
+
+                # add HAVING clause
+                if query.having:
+                    sql_parts.append(f"HAVING {query.having}")
+
+            # add ORDER BY clause
+            if query.order_by:
+                direction = query.order_direction.value
+                sql_parts.append(f"ORDER BY {query.order_by} {direction}")
+
+            # add LIMIT and OFFSET clauses
+            if query.limit is not None:
+                sql_parts.append(f"LIMIT {query.limit}")
+                if query.offset is not None:
+                    sql_parts.append(f"OFFSET {query.offset}")
+
+            # build final SQL
+            sql = " ".join(sql_parts)
+            logger.INFO(f"Executing query: {sql} with args: {query.where_args}")
+
+            # execute query
+            if query.where_args:
+                self.cursor.execute(sql, query.where_args)
+            else:
+                self.cursor.execute(sql)
+
+            # fetch results and convert to list of dictionaries
+            rows = self.cursor.fetchall()
+            result = [dict(row) for row in rows]
+
+            logger.INFO(f"Successfully selected {len(result)} rows from {query.table}")
+            return result
+
+        except sqlite3.Error as e:
+            raise DatabaseError(
+                f"Failed to select data from table '{query.table}': {str(e)}",
+                "select",
+                {"table": query.table, "sql": sql},
+                e
+            )
+
+    def select_one(self, query: SelectQuery) -> Optional[Dict]:
+        """
+        execute select query and return the first row
+
+        Args:
+            query: select query
+
+        Returns:
+            first row of the query or None if no row is found.
+        """
+        query.limit = 1
+        results = self.select_data(query)
+        return results[0] if results else None
+
+    def count(self, table: str, where: Optional[str] = None, where_args: Optional[tuple] = None) -> int:
+        """
+        count the number of records which meet the condition in a table
+
+        Args:
+            table: table name
+            where: where clause
+            where_args: where clause parameters
+
+        Returns:
+            Number of records.
+        """
+        query = SelectQuery(
+            table=table,
+            columns=["COUNT(*) as count"],
+            where=where,
+            where_args=where_args
+        )
+
+        result = self.select_one(query)
+        return result["count"] if result else 0
 
     def export_table_data(self, table_name: str) -> dict:
         """
@@ -571,14 +711,15 @@ class DatabaseManager:
             else:
                 self.cursor.execute(sql)
 
-            # For SELECT statements, return results
-            if sql.strip().upper().startswith('SELECT'):
+            # Check if this is a query that returns results
+            if self.cursor.description is not None:
+                # this is a SELECT statement
                 rows = self.cursor.fetchall()
                 result = [dict(row) for row in rows]
                 logger.INFO(f"Raw SQL executed successfully, returned {len(result)} rows")
                 return result
             else:
-                # For non-SELECT statements, commit and return affected rows
+                # this is an INSERT, UPDATE, or DELETE statement
                 self.conn.commit()
                 affected_rows = self.cursor.rowcount
                 logger.INFO(f"Raw SQL executed successfully, affected {affected_rows} rows")

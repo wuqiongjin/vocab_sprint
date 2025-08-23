@@ -190,14 +190,14 @@ class TableNotFoundError(DatabaseError):
 
 class ColumnNotFoundError(DatabaseError):
     """
-    Raised when a column is not found in a table.
+    Raised when columns are not found in a table.
     """
     DEFAULT_CODE = ErrorCode.COLUMN_NOT_FOUND
 
     def __init__(
         self, 
         table_name: str,
-        column_name: str,
+        column_name: list[str],
         details: dict[str, Any] = None,
         cause: Exception = None
     ):
@@ -218,6 +218,21 @@ class InvalidTableStructureError(DatabaseError):
     ):
         message = f"Invalid structure for table '{table_name}'"
         super().__init__(message, self.DEFAULT_CODE, "table_structure", details, cause)
+
+class NoRowsAffectedError(DatabaseError):
+    """
+    Raised when no rows are affected by a database operation.
+    """
+    DEFAULT_CODE = ErrorCode.DATABASE_QUERY_ERROR
+
+    def __init__(
+        self, 
+        operation: str,
+        details: dict[str, Any] = None,
+        cause: Exception = None
+    ):
+        message = f"No rows affected by database operation '{operation}'"
+        super().__init__(message, self.DEFAULT_CODE, operation, details, cause)
 
 # # test
 # if __name__ == '__main__':

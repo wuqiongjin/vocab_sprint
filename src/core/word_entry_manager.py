@@ -1,7 +1,9 @@
 from src.core.word_entry import WordEntry
 from src.utils.database_manager import DatabaseManager, DataType
 from src.utils.logger import Logger
-from src.utils.exceptions import TableNotFoundError
+from src.utils.exceptions import TableNotFoundError, ColumnNotFoundError, InvalidTableStructureError
+
+from dataclasses import fields
 
 logger = Logger("word_entry_manager")
 
@@ -11,8 +13,27 @@ class WordEntryManager:
         # check table exist
         if not self.database_manager.check_table_exist(table_name):
             raise TableNotFoundError(table_name)
-        self.table_name = table_name
+        
+        word_entry_columns = [field.name for field in fields(WordEntry)]
+        table_columns = [col["name"] for col in self.database_manager.get_table_columns(table_name)]
 
+        try:
+            # check table structure (Must exactly match WordEntry class)
+            # 1. check if all columns in WordEntry class are in the database table
+            self.database_manager.check_columns_valid(table_name, word_entry_columns, table_columns)
+            # 2. check if all columns in the database table are in WordEntry class
+            self.database_manager.check_columns_valid(table_name, table_columns, word_entry_columns)
+        except ColumnNotFoundError as e:
+            raise InvalidTableStructureError(
+                f"Table {table_name} structure is invalid",
+                {
+                    "word_entry_columns": word_entry_columns,
+                    "actual_columns": table_columns,
+                },
+                e
+            )
+
+        self.table_name = table_name
         # load data from database
         self.word_dict = self.database_manager.export_table_data(table_name)
 

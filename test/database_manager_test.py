@@ -1,8 +1,8 @@
 import pytest
 import tempfile
 import os
-from src.utils.database_manager import DatabaseManager, DataType
-from src.utils.exceptions import ValidationError, DatabaseError, TableNotFoundError
+from src.utils.database_manager import DatabaseManager, DataType, SelectQuery, OrderDirection
+from src.utils.exceptions import ValidationError, DatabaseError, TableNotFoundError, ColumnNotFoundError
 
 def test_create_table_basic():
     """测试基本表创建功能"""
@@ -123,17 +123,17 @@ def test_create_table_validation_errors():
             db.create_table("test", [])
         
         # 测试无效主键列
-        with pytest.raises(ValidationError):
+        with pytest.raises(ColumnNotFoundError):
             config = {"primary_key": "invalid_column"}
             db.create_table("test", columns, config)
         
         # 测试无效NOT NULL列
-        with pytest.raises(ValidationError):
+        with pytest.raises(ColumnNotFoundError):
             config = {"not_null_keys": ["invalid_column"]}
             db.create_table("test", columns, config)
         
         # 测试无效唯一键列
-        with pytest.raises(ValidationError):
+        with pytest.raises(ColumnNotFoundError):
             config = {"unique_keys": ["invalid_column"]}
             db.create_table("test", columns, config)
             
@@ -255,41 +255,46 @@ def test_create_table_edge_cases():
         db.close()
         os.unlink(db_path)
 
-# def test_default_values():
-#     """测试默认值功能"""
-#     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
-#         db_path = tmp.name
+def test_default_values():
+    """测试默认值功能"""
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+        db_path = tmp.name
     
-#     try:
-#         db = DatabaseManager(db_path, create_if_not_exist=True)
+    try:
+        db = DatabaseManager(db_path, create_if_not_exist=True)
         
-#         columns = [
-#             ("id", DataType.INTEGER),
-#             ("name", DataType.TEXT),
-#             ("score", DataType.REAL),
-#             ("created", DataType.DATETIME)
-#         ]
+        columns = [
+            ("id", DataType.INTEGER),
+            ("name", DataType.TEXT),
+            ("score", DataType.REAL),
+            ("created", DataType.DATETIME)
+        ]
         
-#         config = {
-#             "default_values": {
-#                 "score": 100.0,
-#                 "created": "CURRENT_TIMESTAMP"
-#             }
-#         }
+        config = {
+            "default_values": {
+                "score": 100.0,
+                "created": "CURRENT_TIMESTAMP"
+            }
+        }
         
-#         db.create_table("test", columns, config)
+        db.create_table("test", columns, config)
         
-#         # 插入不带默认值字段的数据
-#         db.insert_data("test", {"id": 1, "name": "Test"})
+        # 插入不带默认值字段的数据
+        db.insert_data("test", {"id": 1, "name": "Test"})
         
-#         # 验证默认值
-#         data = db.select_data("test", where_clause="id = ?", where_args=(1,))
-#         assert data[0]["score"] == 100.0
-#         assert data[0]["created"] is not None
+        # 验证默认值
+        query = SelectQuery(
+            table="test",
+            where_clause="id = ?",
+            where_args=(1,)
+        )
+        data = db.select_data(query)
+        assert data[0]["score"] == 100.0
+        assert data[0]["created"] is not None
         
-#     finally:
-#         db.close()
-#         os.unlink(db_path)
+    finally:
+        db.close()
+        os.unlink(db_path)
 
 
 def test_insert_data_edge_cases():
@@ -317,8 +322,8 @@ def test_insert_data_edge_cases():
         with pytest.raises(DatabaseError):
             db.insert_data("users", {"id": 1, "email": "a@a.com"})
 
-        # 2) 多余字段 -> 应触发 ValidationError（字段不存在的校验）
-        with pytest.raises(ValidationError):
+        # 2) 多余字段 -> 应触发 ColumnNotFoundError（字段不存在的校验）
+        with pytest.raises(ColumnNotFoundError):
             db.insert_data("users", {"id": 2, "name": "Bob", "email": "b@b.com", "age": 18})
 
         # 3) UNIQUE 冲突 -> 应触发 DatabaseError
@@ -335,39 +340,95 @@ def test_insert_data_edge_cases():
         os.unlink(db_path)
 
 
-# def test_select_and_export_data():
-#     """测试查询和导出功能"""
-#     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-#         db_path = tmp.name
+def test_update_data():
+    """测试更新数据的边界情况"""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
 
-#     try:
-#         db = DatabaseManager(db_path, create_if_not_exist=True)
+    try:
+        db = DatabaseManager(db_path, create_if_not_exist=True)
 
-#         columns = [("id", DataType.INTEGER), ("name", DataType.TEXT), ("score", DataType.REAL)]
-#         db.create_table("users", columns, {"primary_key": "id"})
+        columns = [
+            ("id", DataType.INTEGER),
+            ("name", DataType.TEXT),
+            ("email", DataType.TEXT),
+        ]
+        config = {
+            "primary_key": "id",
+            "not_null_keys": ["id", "name"],
+            "unique_keys": ["email"],
+        }
+        db.create_table("users", columns, config)
 
-#         db.insert_data("users", {"id": 1, "name": "Alice", "score": 95.5})
-#         db.insert_data("users", {"id": 2, "name": "Bob", "score": 88.0})
-#         db.insert_data("users", {"id": 3, "name": "Charlie", "score": 70.0})
+        # 插入数据
+        db.insert_data("users", {"id": 1, "name": "Alice", "email": "a@a.com"})
+        db.insert_data("users", {"id": 2, "name": "Bob", "email": "b@b.com"})
 
-#         # 测试 select_data
-#         result = db.select_data("users", where_clause="score > ?", where_args=(80,), order_by="score DESC")
-#         assert len(result) == 2
-#         assert result[0]["name"] == "Alice"
+        # 测试更新数据
+        db.update_data("users", {"name": "Charlie"}, where_clause="id = ?", where_args=(1,))
+        query = SelectQuery(
+            table="users",
+            columns=["id", "name", "email"],
+            where_clause="id = ?",
+            where_args=(1,)
+        )
+        data = db.select_data(query)
+        assert data[0]["name"] == "Charlie"
 
-#         # 测试 limit
-#         result = db.select_data("users", limit=1, order_by="id ASC")
-#         assert result[0]["id"] == 1
+        # 测试更新不存在的数据
+        with pytest.raises(DatabaseError):
+            db.update_data("users", {"name": "Dave"}, where_clause="id = ?", where_args=(4,), raise_if_no_rows=True)
 
-#         # 测试 export_table_data
-#         exported = db.export_table_data("users")
-#         assert isinstance(exported, dict)
-#         assert all(isinstance(k, int) for k in exported.keys())
-#         assert exported[1][1] == "Alice"
+    finally:
+        db.close()
+        os.unlink(db_path)
 
-#     finally:
-#         db.close()
-#         os.unlink(db_path)
+def test_select_and_export_data():
+    """测试查询和导出功能"""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = DatabaseManager(db_path, create_if_not_exist=True)
+
+        columns = [("id", DataType.INTEGER), ("name", DataType.TEXT), ("score", DataType.REAL)]
+        db.create_table("users", columns, {"primary_key": "id"})
+
+        db.insert_data("users", {"id": 1, "name": "Alice", "score": 95.5})
+        db.insert_data("users", {"id": 2, "name": "Bob", "score": 88.0})
+        db.insert_data("users", {"id": 3, "name": "Charlie", "score": 70.0})
+
+        # 测试 select_data
+        query = SelectQuery(
+            table="users",
+            where_clause="score > ?",
+            where_args=(80,),
+            order_by="score",
+            order_direction=OrderDirection.DESC
+        )
+        result = db.select_data(query)
+        assert len(result) == 2
+        assert result[0]["name"] == "Alice"
+
+        # 测试 limit
+        query = SelectQuery(
+            table="users",
+            limit=1,
+            order_by="id",
+            order_direction=OrderDirection.ASC
+        )
+        result = db.select_data(query)
+        assert result[0]["id"] == 1
+
+        # 测试 export_table_data
+        exported = db.export_table_data("users")
+        assert isinstance(exported, dict)
+        assert all(isinstance(k, int) for k in exported.keys())
+        assert exported[1][1] == "Alice"
+
+    finally:
+        db.close()
+        os.unlink(db_path)
 
 
 def test_check_table_and_get_columns_errors():
@@ -408,36 +469,38 @@ def test_close_multiple_times():
 
 
 if __name__ == "__main__":
-    # 运行所有测试
     test_create_table_basic()
     print("✓ 基本表创建测试通过")
-    
+
     test_create_table_with_constraints()
     print("✓ 约束测试通过")
-    
+
     test_create_table_with_composite_keys()
     print("✓ 复合键测试通过")
-    
+
     test_create_table_validation_errors()
     print("✓ 验证错误测试通过")
-    
+
     test_create_table_with_foreign_keys()
     print("✓ 外键测试通过")
-    
+
     test_create_table_and_insert_data()
     print("✓ 数据操作测试通过")
     
     test_create_table_edge_cases()
     print("✓ 边界情况测试通过")
     
-    # test_default_values()``
-    # print("✓ 默认值测试通过")
+    test_default_values()
+    print("✓ 默认值测试通过")
 
     test_insert_data_edge_cases()
     print("✓ 插入数据边界测试通过")
 
-    # test_select_and_export_data()
-    # print("✓ 查询和导出测试通过")
+    test_update_data()
+    print("✓ 更新数据测试通过")
+
+    test_select_and_export_data()
+    print("✓ 查询和导出测试通过")
 
     test_check_table_and_get_columns_errors()
     print("✓ 检查和列获取测试通过")
