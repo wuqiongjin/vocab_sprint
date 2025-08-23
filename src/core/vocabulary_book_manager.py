@@ -55,9 +55,9 @@ class VocabularyBookManager:
     @staticmethod
     def create_word_entry_table(database_manager):
         columns = [
-            ("word", DataType.TEXT),
-            ("phonetic_UK", DataType.TEXT),
-            ("phonetic_US", DataType.TEXT),
+            ("Word", DataType.TEXT),
+            ("Phonetic_UK", DataType.TEXT),
+            ("Phonetic_US", DataType.TEXT),
             ("Interp_Noun", DataType.TEXT),
             ("Interp_Verb", DataType.TEXT),
             ("Interp_Adj", DataType.TEXT),
@@ -70,7 +70,7 @@ class VocabularyBookManager:
             ("Interp_Det", DataType.TEXT),
             ("Interp_Num", DataType.TEXT),
             ("Interp_Aux", DataType.TEXT),
-            ("Interp_OTHERS", DataType.TEXT),
+            ("Interp_Others", DataType.TEXT),
         ]
         database_manager.create_table("WordEntries", columns)
 

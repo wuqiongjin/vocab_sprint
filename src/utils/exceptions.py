@@ -52,7 +52,7 @@ class BaseError(Exception):
         self.cause = cause
 
         # construct the full error message
-        full_message = f"{self.code.name}: {self.message}"
+        full_message = f"{self.code}: {self.message}"
         if self.details:
             full_message += f" | Details: {self.details}"
         if self.cause:
@@ -164,7 +164,7 @@ class DatabaseConnectionError(DatabaseError):
 
     def __init__(
         self, 
-        message: str, 
+        message: str,
         database_path: str = None,
         details: dict[str, Any] = None,
         cause: Exception = None
@@ -213,12 +213,11 @@ class InvalidTableStructureError(DatabaseError):
     def __init__(
         self, 
         table_name: str,
-        message: str,
         details: dict[str, Any] = None,
         cause: Exception = None
     ):
-        full_message = f"Invalid structure for table '{table_name}': {message}"
-        super().__init__(full_message, self.DEFAULT_CODE, "table_structure", details, cause)
+        message = f"Invalid structure for table '{table_name}'"
+        super().__init__(message, self.DEFAULT_CODE, "table_structure", details, cause)
 
 # # test
 # if __name__ == '__main__':

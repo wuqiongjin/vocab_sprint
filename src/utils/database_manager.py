@@ -2,10 +2,10 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from enum import Enum
-from typing import Optional, List, Union, Dict, Any
+from typing import Optional, List, Union, Dict, Any, TypedDict
 
 from src.utils.exceptions import (
-    DatabaseError, DatabaseConnectionError, TableNotFoundError, 
+    ErrorCode, DatabaseError, DatabaseConnectionError, TableNotFoundError, 
     ColumnNotFoundError, InvalidTableStructureError, ValidationError
 )
 from src.utils.logger import Logger
@@ -22,6 +22,31 @@ class DataType(Enum):
     DATE = "DATE"
     DATETIME = "DATETIME"
     NUMERIC = "NUMERIC"
+
+class TableConfig(TypedDict, total=False):
+    """
+    Table configuration (all parameters are optional)
+
+    Attributes:
+        primary_key: Column name or list of column names for primary key.
+        foreign_keys: List of foreign key definitions as (column, referenced_table, referenced_column).
+        not_null_keys: List of column names that should have NOT NULL constraint.
+        unique_keys: List of column names or lists of column names for unique constraints.
+        default_values: Dictionary of default values for columns.
+        check_constraints: List of check constraints as (column_name, condition).
+
+    Usage:
+        config = {"primary_key": "id", "not_null_keys": ["id", "name"]}
+        or:
+        config = {}  # empty config will create a table without any constraints
+    """
+
+    primary_key: Union[str, List[str]]
+    foreign_keys: List[tuple[str, str, str]]
+    not_null_keys: List[str]
+    unique_keys: List[Union[str, List[str]]]
+    default_values: Dict[str, Any]
+    check_constraints: List[tuple[str, str]]
 
 class DatabaseManager:
     def __init__(self, database_path: str, create_if_not_exist=False):
@@ -94,17 +119,15 @@ class DatabaseManager:
             Logger.ERROR("Error while closing database connection.")
             pass  # ignore any exception in destructor
 
-    def create_table(self, table_name: str, columns: list[tuple[str, DataType]], 
-                    primary_key: Optional[Union[str, List[str]]] = None, 
-                    foreign_keys: Optional[List[tuple[str, str, str]]] = None) -> bool:
+    def create_table(self, table_name: str, columns: list[tuple[str, DataType]],
+                    config: Optional[TableConfig] = None) -> bool:
         """
         Create a new table if it doesn't exist.
 
         Args:
             table_name: Name of the table to create.
             columns: List of column definitions, each as a tuple of (column_name, DataType).
-            primary_key: Column name or list of column names for primary key.
-            foreign_keys: List of foreign key definitions as (column, referenced_table, referenced_column).
+            config: Table configuration.
 
         Returns:
             True if the table was created, False if it already exists.
@@ -120,33 +143,118 @@ class DatabaseManager:
         if not columns:
             raise ValidationError("Columns list cannot be empty", 
                                 {"parameter": "columns"})
+
+        if self.check_table_exist(table_name):
+            logger.INFO(f"Table '{table_name}' already exists, skipping creation")
+            return False
+
+        # get table configuration
+        config = config or {}
+        primary_key = config.get('primary_key') # if not provided, will be None
+        foreign_keys = config.get('foreign_keys', [])
+        not_null_keys = config.get('not_null_keys', [])
+        unique_keys = config.get('unique_keys', [])
+        default_values = config.get('default_values', {})
+        check_constraints = config.get('check_constraints', [])
+
+        # get all column names
+        column_names = [col_name for col_name, _ in columns]
+
+        # verify table configuration's attributes are valid in terms of columns
+        def validate_columns(columns_to_check, param_name):
+            if not columns_to_check:
+                return
+
+            invalid_columns = [col for col in columns_to_check if col not in column_names]
+            if invalid_columns:
+                raise ValidationError(
+                    f"Invalid columns in {param_name}",
+                    {
+                        "invalid_columns": invalid_columns,
+                        "valid_columns": column_names,
+                        "parameter": param_name
+                    }
+                )
+
+        # validate primary_key values
+        if primary_key:
+            if isinstance(primary_key, list):
+                validate_columns(primary_key, "primary_key")
+            else:
+                validate_columns([primary_key], "primary_key")
+
+        # validate foreign_keys values
+        fk_columns = [fk[0] for fk in foreign_keys]
+        validate_columns(fk_columns, "foreign_keys")
+
+        # validate not_null_keys values
+        validate_columns(not_null_keys, "not_null_keys")
         
+        # validate unique_keys values (composite keys are allowed. It should be flattened first!)
+        flat_unique_keys = []
+        for key in unique_keys:
+            if isinstance(key, list):
+                flat_unique_keys.extend(key)
+            else:
+                flat_unique_keys.append(key)
+        validate_columns(flat_unique_keys, "unique_keys")
+
+        # validate default values
+        validate_columns(default_values.keys(), "default_values")
+
+        # validate check_constraints values
+        check_columns = [cc[0] for cc in check_constraints]
+        validate_columns(check_columns, "check_constraints")
+
+
+        # column definitions (contains NOT NULL constraint and default value)
+        column_definitions = []
+        for col_name, data_type in columns:
+            # add column definition
+            not_null = " NOT NULL" if col_name in not_null_keys else ""
+
+            # add default value
+            default = ""
+            if col_name in default_values:
+                default_val = default_values[col_name]
+                if isinstance(default_val, str) and data_type != DataType.TEXT:
+                    default = f" DEFAULT {default_val}"
+                else:
+                    default = f" DEFAULT '{default_val}'"
+
+            column_definitions.append(f"{col_name} {data_type.value}{not_null}{default}")
+
+
+        # add primary key constraint
+        if primary_key:
+            if isinstance(primary_key, str):
+                primary_key = [primary_key]
+            pk_columns = ', '.join(primary_key)
+            column_definitions.append(f"PRIMARY KEY ({pk_columns})")
+
+        # add foreign key constraints
+        for fk_column, ref_table, ref_column in foreign_keys:
+            column_definitions.append(f"FOREIGN KEY ({fk_column}) REFERENCES {ref_table}({ref_column})")
+
+        # add unique constraints
+        for key in unique_keys:
+            if isinstance(key, list):
+                # composite unique key
+                unique_columns = ', '.join(key)
+                column_definitions.append(f"UNIQUE ({unique_columns})")
+            else:
+                # single unique key
+                column_definitions.append(f"UNIQUE ({key})")
+
+        # add extra check constraints
+        for column_name, condition in check_constraints:
+            column_definitions.append(f"CHECK ({column_name} {condition})")
+
         try:
-            if self.check_table_exist(table_name):
-                logger.INFO(f"Table '{table_name}' already exists, skipping creation")
-                return False
-            
-            # column definitions
-            column_definitions = []
-            for col_name, data_type in columns:
-                column_definitions.append(f"{col_name} {data_type.value}")
-            
-            # primary key constraint
-            if primary_key:
-                if isinstance(primary_key, str):
-                    primary_key = [primary_key]
-                pk_columns = ', '.join(primary_key)
-                column_definitions.append(f"PRIMARY KEY ({pk_columns})")
-            
-            # foreign key constraints
-            if foreign_keys:
-                for fk_column, ref_table, ref_column in foreign_keys:
-                    column_definitions.append(f"FOREIGN KEY ({fk_column}) REFERENCES {ref_table}({ref_column})")
-           
             # build complete SQL statement
             sql = f"CREATE TABLE {table_name} ({', '.join(column_definitions)})"
             logger.DEBUG(f"Creating table: {sql}")
-            
+
             self.cursor.execute(sql)
             self.conn.commit()
             logger.INFO(f"Created new table successfully: {table_name}")
@@ -156,8 +264,13 @@ class DatabaseManager:
             self.conn.rollback()
             raise DatabaseError(
                 f"Failed to create table '{table_name}': {str(e)}",
+                ErrorCode.DATABASE_ERROR,
                 "create_table",
-                {"table_name": table_name, "columns": str(columns)},
+                {
+                    "table_name": table_name, 
+                    "columns": str(columns),
+                    "sql": sql
+                },
                 e
             )
 
@@ -174,6 +287,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise DatabaseError(
                 f"Failed to check table existence: {str(e)}",
+                ErrorCode.DATABASE_ERROR,
                 "check_table_exist",
                 {"table_name": table_name},
                 e
@@ -198,6 +312,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise DatabaseError(
                 f"Failed to check column existence: {str(e)}",
+                ErrorCode.DATABASE_ERROR,
                 "check_column_exist",
                 {"table_name": table_name, "column_name": column_name},
                 e
@@ -234,6 +349,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             raise DatabaseError(
                 f"Failed to get table columns: {str(e)}",
+                ErrorCode.DATABASE_ERROR,
                 "get_table_columns",
                 {"table_name": table_name},
                 e

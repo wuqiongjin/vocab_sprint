@@ -2,8 +2,14 @@ import logging
 import os
 
 from colorama import Fore, Style
+from platformdirs import user_data_dir
 
-LOG_DIR = "logs"
+APP_NAME = "vocab_sprint"
+
+# log directory
+# Windows: C:\Users\<user>\AppData\Local\{APP_NAME}\Logs
+# macOS: ~/Library/Logs/{APP_NAME}/Logs
+# Linux: ~/.local/share/logs
 
 class ColoredFormatter(logging.Formatter):
     """
@@ -28,6 +34,7 @@ class ColoredFormatter(logging.Formatter):
 
 class Logger:
     def __init__(self, name="vocab_logger", level=logging.INFO):
+        self.log_dir = user_data_dir("logs", APP_NAME)
         self.logger = logging.getLogger(name)
 
         # set default level to info
@@ -37,9 +44,9 @@ class Logger:
         console_handler = logging.StreamHandler()
         
         # create a file handler
-        if not os.path.exists(LOG_DIR):
-            os.makedirs(LOG_DIR)
-        file_handler = logging.FileHandler(f"{LOG_DIR}/{name}.log", mode="a")
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+        file_handler = logging.FileHandler(f"{self.log_dir}/{name}.log", mode="a")
 
         # create a formatter
         formatter = logging.Formatter(
