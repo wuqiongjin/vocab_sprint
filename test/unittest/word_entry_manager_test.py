@@ -1,10 +1,15 @@
-import tempfile
+import io
 import os
 import pytest
+import sys
+import tempfile
+
 from src.core.word_entry import WordEntry
 from src.core.word_entry_manager import WordEntryManager
 from src.utils.database_manager import DatabaseManager, DataType
 from src.utils.exceptions import TableNotFoundError, InvalidTableStructureError
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def create_test_table(db, table_name="WordEntry"):
     """创建测试用的表结构"""
@@ -319,24 +324,24 @@ def test_word_entry_with_all_fields():
 
 if __name__ == "__main__":
     test_word_entry_manager_init()
-    print("✓ WordEntryManager初始化测试通过!")
+    print("[PASSED] WordEntryManager初始化测试通过!")
 
     test_invalid_table_structure()
-    print("✓ 表结构不匹配测试通过!")
+    print("[PASSED] 表结构不匹配测试通过!")
 
     test_add_word_entry()
-    print("✓ 添加单词条目测试通过!")
+    print("[PASSED] 添加单词条目测试通过!")
 
     test_remove_word_entry()
-    print("✓ 删除单词条目测试通过!")
+    print("[PASSED] 删除单词条目测试通过!")
 
     test_update_word_entry()
-    print("✓ 更新单词条目测试通过!")
+    print("[PASSED] 更新单词条目测试通过!")
 
     test_get_methods()
-    print("✓ 获取单词条目测试通过!")
+    print("[PASSED] 获取单词条目测试通过!")
 
     test_word_entry_with_all_fields()
-    print("✓ 使用WordEntry的所有字段测试通过!")
+    print("[PASSED] 使用WordEntry的所有字段测试通过!")
 
-    print(" ✓ 所有测试通过!")
+    print("\n[ALL PASSED] 所有测试通过!")

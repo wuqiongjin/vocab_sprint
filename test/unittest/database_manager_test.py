@@ -1,8 +1,13 @@
-import pytest
-import tempfile
+import io
 import os
+import pytest
+import sys
+import tempfile
+
 from src.utils.database_manager import DatabaseManager, DataType, SelectQuery, OrderDirection
 from src.utils.exceptions import ValidationError, DatabaseError, TableNotFoundError, ColumnNotFoundError
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 def test_create_table_basic():
     """测试基本表创建功能"""
@@ -470,42 +475,42 @@ def test_close_multiple_times():
 
 if __name__ == "__main__":
     test_create_table_basic()
-    print("✓ 基本表创建测试通过")
+    print("[PASSED] 基本表创建测试通过")
 
     test_create_table_with_constraints()
-    print("✓ 约束测试通过")
+    print("[PASSED] 约束测试通过")
 
     test_create_table_with_composite_keys()
-    print("✓ 复合键测试通过")
+    print("[PASSED] 复合键测试通过")
 
     test_create_table_validation_errors()
-    print("✓ 验证错误测试通过")
+    print("[PASSED] 验证错误测试通过")
 
     test_create_table_with_foreign_keys()
-    print("✓ 外键测试通过")
+    print("[PASSED] 外键测试通过")
 
     test_create_table_and_insert_data()
-    print("✓ 数据操作测试通过")
+    print("[PASSED] 数据操作测试通过")
     
     test_create_table_edge_cases()
-    print("✓ 边界情况测试通过")
+    print("[PASSED] 边界情况测试通过")
     
     test_default_values()
-    print("✓ 默认值测试通过")
+    print("[PASSED] 默认值测试通过")
 
     test_insert_data_edge_cases()
-    print("✓ 插入数据边界测试通过")
+    print("[PASSED] 插入数据边界测试通过")
 
     test_update_data()
-    print("✓ 更新数据测试通过")
+    print("[PASSED] 更新数据测试通过")
 
     test_select_and_export_data()
-    print("✓ 查询和导出测试通过")
+    print("[PASSED] 查询和导出测试通过")
 
     test_check_table_and_get_columns_errors()
-    print("✓ 检查和列获取测试通过")
+    print("[PASSED] 检查和列获取测试通过")
 
     test_close_multiple_times()
-    print("✓ 关闭测试通过")
+    print("[PASSED] 关闭测试通过")
 
-    print("\n🎉 所有测试通过！")
+    print("\n[ALL PASSED] 所有测试通过！")
