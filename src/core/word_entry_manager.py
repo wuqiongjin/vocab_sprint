@@ -14,7 +14,7 @@ class WordEntryManager:
         if not self.database_manager.check_table_exist(table_name):
             raise TableNotFoundError(table_name)
         
-        word_entry_columns = [field.name for field in fields(WordEntry)]
+        word_entry_columns = WordEntry.get_database_columns()
         table_columns = [col["name"] for col in self.database_manager.get_table_columns(table_name)]
 
         try:
@@ -38,11 +38,11 @@ class WordEntryManager:
         self.word_dict = self.database_manager.export_table_data(table_name)
 
     def add_word_entry(self, word_entry: WordEntry) -> bool:
-        if word_entry.Word in self.word_dict:
-            logger.ERROR(f"add_word_entry failed! Word: {word_entry.Word} already exists")
+        if word_entry.word in self.word_dict:
+            logger.ERROR(f"add_word_entry failed! word: {word_entry.word} already exists")
             return False
-        self.word_dict[word_entry.Word] = word_entry
-        self.database_manager.insert_data(self.table_name, word_entry.__dict__)
+        self.word_dict[word_entry.word] = word_entry
+        self.database_manager.insert_data(self.table_name, word_entry.to_flat_dict())
         return True
 
     def get_word_entries(self):
@@ -53,18 +53,18 @@ class WordEntryManager:
 
     def remove_word_entry(self, word: str) -> bool:
         if word not in self.word_dict:
-            logger.ERROR(f"remove_word_entry failed! Word: {word} not found in {self.table_name}")
+            logger.ERROR(f"remove_word_entry failed! word: {word} not found in {self.table_name}")
             return False
         self.word_dict.pop(word)
-        self.database_manager.delete_data(self.table_name, f"Word='{word}'")
+        self.database_manager.delete_data(self.table_name, f"word='{word}'")
         return True
-
+         
     def update_word_entry(self, word: str, word_entry: WordEntry) -> bool:
         if word not in self.word_dict:
-            logger.ERROR(f"update_word_entry failed! Word: {word} not found in {self.table_name}")
+            logger.ERROR(f"update_word_entry failed! word: {word} not found in {self.table_name}")
             return False
         self.word_dict[word] = word_entry
-        self.database_manager.update_data(self.table_name, word_entry.__dict__, f"Word='{word}'")
+        self.database_manager.update_data(self.table_name, word_entry.to_flat_dict(), f"word='{word}'")
         return True
 
     def get_all_words(self):

@@ -1,19 +1,19 @@
 permissions:
   contents: read
+  security-events: write
 
 name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev_0826" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev_0826" ]
   schedule:
     - cron: '28 23 * * 6'
 
 jobs:
   analyze:
-    if: ${{ contains(github.event.pull_request.head.repo.full_name, github.repository) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,8 +32,6 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: python
-          # 添加以下配置避免检测其他语言
-          build-mode: none  # 禁用自动语言检测
 
       - name: Perform CodeQL Analysis
         if: steps.files.outputs.found == 'true'

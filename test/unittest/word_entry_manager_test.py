@@ -4,7 +4,7 @@ import pytest
 import sys
 import tempfile
 
-from src.core.word_entry import WordEntry
+from src.core.word_entry import WordEntry, PartOfSpeech
 from src.core.word_entry_manager import WordEntryManager
 from src.utils.database_manager import DatabaseManager, DataType
 from src.utils.exceptions import TableNotFoundError, InvalidTableStructureError
@@ -107,11 +107,13 @@ def test_add_word_entry():
         
         # 添加新单词
         word_entry = WordEntry(
-            Word="test",
-            Phonetic_UK="/test_uk/",
-            Phonetic_US="/test_us/",
-            Interp_Noun="测试名词",
-            Interp_Verb="测试动词"
+            word="test",
+            phonetic_UK="/test_uk/",
+            phonetic_US="/test_us/",
+            interpretations={
+                PartOfSpeech.NOUN: "测试名词",
+                PartOfSpeech.VERB: "测试动词"
+            }
         )
         result = manager.add_word_entry(word_entry)
         assert result is True
@@ -119,9 +121,9 @@ def test_add_word_entry():
         
         # 验证添加的数据
         added_entry = manager.get_word_entry("test")
-        assert added_entry.Word == "test"
-        assert added_entry.Phonetic_UK == "/test_uk/"
-        assert added_entry.Interp_Noun == "测试名词"
+        assert added_entry.word == "test"
+        assert added_entry.phonetic_UK == "/test_uk/"
+        assert added_entry.interpretations[PartOfSpeech.NOUN] == "测试名词"
         
         # 尝试添加重复单词
         result2 = manager.add_word_entry(word_entry)
@@ -145,10 +147,10 @@ def test_remove_word_entry():
         
         # 先添加一个单词
         word_entry = WordEntry(
-            Word="test",
-            Phonetic_UK="/test_uk/",
-            Phonetic_US="/test_us/",
-            Interp_Noun="测试"
+            word="test",
+            phonetic_UK="/test_uk/",
+            phonetic_US="/test_us/",
+            interpretations={PartOfSpeech.NOUN: "测试"}
         )
         manager.add_word_entry(word_entry)
         
@@ -179,29 +181,31 @@ def test_update_word_entry():
         
         # 先添加一个单词
         word_entry = WordEntry(
-            Word="test",
-            Phonetic_UK="/test_uk/",
-            Phonetic_US="/test_us/",
-            Interp_Noun="测试"
+            word="test",
+            phonetic_UK="/test_uk/",
+            phonetic_US="/test_us/",
+            interpretations={PartOfSpeech.NOUN: "测试"}
         )
         manager.add_word_entry(word_entry)
         
         # 更新单词
         updated_entry = WordEntry(
-            Word="test",
-            Phonetic_UK="/updated_uk/",
-            Phonetic_US="/updated_us/",
-            Interp_Noun="更新后的测试",
-            Interp_Verb="动词解释"
+            word="test",
+            phonetic_UK="/updated_uk/",
+            phonetic_US="/updated_us/",
+            interpretations={
+                PartOfSpeech.NOUN: "更新后的测试",
+                PartOfSpeech.VERB: "动词解释"
+            }
         )
         result = manager.update_word_entry("test", updated_entry)
         assert result is True
         
         # 验证更新后的数据
         updated = manager.get_word_entry("test")
-        assert updated.Phonetic_UK == "/updated_uk/"
-        assert updated.Interp_Noun == "更新后的测试"
-        assert updated.Interp_Verb == "动词解释"
+        assert updated.phonetic_UK == "/updated_uk/"
+        assert updated.interpretations[PartOfSpeech.NOUN] == "更新后的测试"
+        assert updated.interpretations[PartOfSpeech.VERB] == "动词解释"
         
         # 更新不存在的单词
         result2 = manager.update_word_entry("nonexistent", updated_entry)
@@ -225,9 +229,24 @@ def test_get_methods():
         
         # 添加几个单词
         words = [
-            WordEntry("word1", "/uk1/", "/us1/", "解释1", "动词1"),
-            WordEntry("word2", "/uk2/", "/us2/", "解释2", "动词2"),
-            WordEntry("word3", "/uk3/", "/us3/", "解释3", "动词3"),
+            WordEntry(
+                word="word1", 
+                phonetic_UK="/uk1/", 
+                phonetic_US="/us1/", 
+                interpretations={PartOfSpeech.NOUN: "解释1", PartOfSpeech.VERB: "动词1"}
+            ),
+            WordEntry(
+                word="word2", 
+                phonetic_UK="/uk2/", 
+                phonetic_US="/us2/", 
+                interpretations={PartOfSpeech.NOUN: "解释2", PartOfSpeech.VERB: "动词2"}
+            ),
+            WordEntry(
+                word="word3", 
+                phonetic_UK="/uk3/", 
+                phonetic_US="/us3/", 
+                interpretations={PartOfSpeech.NOUN: "解释3", PartOfSpeech.VERB: "动词3"}
+            ),
         ]
         
         for word in words:
@@ -247,10 +266,11 @@ def test_get_methods():
         
         # 测试获取单个单词条目
         entry = manager.get_word_entry("word1")
-        assert entry.Word == "word1"
-        assert entry.Phonetic_UK == "/uk1/"
-        assert entry.Interp_Noun == "解释1"
-        assert entry.Interp_Verb == "动词1"
+        assert entry.word == "word1"
+        assert entry.phonetic_UK == "/uk1/"
+        assert entry.phonetic_US == "/us1/"
+        assert entry.interpretations[PartOfSpeech.NOUN] == "解释1"
+        assert entry.interpretations[PartOfSpeech.VERB] == "动词1"
         
         # 测试获取不存在的单词
         entry_none = manager.get_word_entry("nonexistent")
@@ -279,22 +299,24 @@ def test_word_entry_with_all_fields():
         
         # 创建一个包含所有字段的WordEntry
         full_entry = WordEntry(
-            Word="complete",
-            Phonetic_UK="/kəmˈpliːt/",
-            Phonetic_US="/kəmˈpliːt/",
-            Interp_Noun="完整",
-            Interp_Verb="完成",
-            Interp_Adj="完全的",
-            Interp_Adv="完全地",
-            Interp_Pron="代词",
-            Interp_Prep="介词",
-            Interp_Conj="连词",
-            Interp_Intj="感叹词",
-            Interp_Art="冠词",
-            Interp_Det="限定词",
-            Interp_Num="数词",
-            Interp_Aux="助动词",
-            Interp_Others="其他"
+            word="complete",
+            phonetic_UK="/kəmˈpliːt/",
+            phonetic_US="/kəmˈpliːt/",
+            interpretations={
+                PartOfSpeech.NOUN: "完整",
+                PartOfSpeech.VERB: "完成",
+                PartOfSpeech.ADJ: "完全的",
+                PartOfSpeech.ADV: "完全地",
+                PartOfSpeech.PRON: "代词",
+                PartOfSpeech.PREP: "介词",
+                PartOfSpeech.CONJ: "连词",
+                PartOfSpeech.INTJ: "感叹词",
+                PartOfSpeech.ART: "冠词",
+                PartOfSpeech.DET: "限定词",
+                PartOfSpeech.NUM: "数词",
+                PartOfSpeech.AUX: "助动词",
+                PartOfSpeech.OTHERS: "其他"
+            }
         )
         
         result = manager.add_word_entry(full_entry)
@@ -302,21 +324,21 @@ def test_word_entry_with_all_fields():
         
         # 验证所有字段都被正确保存
         retrieved = manager.get_word_entry("complete")
-        assert retrieved.Word == "complete"
-        assert retrieved.Phonetic_UK == "/kəmˈpliːt/"
-        assert retrieved.Interp_Noun == "完整"
-        assert retrieved.Interp_Verb == "完成"
-        assert retrieved.Interp_Adj == "完全的"
-        assert retrieved.Interp_Adv == "完全地"
-        assert retrieved.Interp_Pron == "代词"
-        assert retrieved.Interp_Prep == "介词"
-        assert retrieved.Interp_Conj == "连词"
-        assert retrieved.Interp_Intj == "感叹词"
-        assert retrieved.Interp_Art == "冠词"
-        assert retrieved.Interp_Det == "限定词"
-        assert retrieved.Interp_Num == "数词"
-        assert retrieved.Interp_Aux == "助动词"
-        assert retrieved.Interp_Others == "其他"
+        assert retrieved.word == "complete"
+        assert retrieved.phonetic_UK == "/kəmˈpliːt/"
+        assert retrieved.interpretations[PartOfSpeech.NOUN] == "完整"
+        assert retrieved.interpretations[PartOfSpeech.VERB] == "完成"
+        assert retrieved.interpretations[PartOfSpeech.ADJ] == "完全的"
+        assert retrieved.interpretations[PartOfSpeech.ADV] == "完全地"
+        assert retrieved.interpretations[PartOfSpeech.PRON] == "代词"
+        assert retrieved.interpretations[PartOfSpeech.PREP] == "介词"
+        assert retrieved.interpretations[PartOfSpeech.CONJ] == "连词"
+        assert retrieved.interpretations[PartOfSpeech.INTJ] == "感叹词"
+        assert retrieved.interpretations[PartOfSpeech.ART] == "冠词"
+        assert retrieved.interpretations[PartOfSpeech.DET] == "限定词"
+        assert retrieved.interpretations[PartOfSpeech.NUM] == "数词"
+        assert retrieved.interpretations[PartOfSpeech.AUX] == "助动词"
+        assert retrieved.interpretations[PartOfSpeech.OTHERS] == "其他"
         
     finally:
         db.close()

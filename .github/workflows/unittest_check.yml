@@ -2,9 +2,9 @@ name: Unit Test Check
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev_0826" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev_0826" ]
 
 jobs:
   test:
