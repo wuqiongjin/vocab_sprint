@@ -1,0 +1,40 @@
+permissions:
+  contents: read
+
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '28 23 * * 6'
+
+jobs:
+  analyze:
+    if: ${{ contains(github.event.pull_request.head.repo.full_name, github.repository) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Python files
+        id: files
+        run: |
+          if git ls-files '*.py' | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Initialize CodeQL
+        if: steps.files.outputs.found == 'true'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # 添加以下配置避免检测其他语言
+          build-mode: none  # 禁用自动语言检测
+
+      - name: Perform CodeQL Analysis
+        if: steps.files.outputs.found == 'true'
+        uses: github/codeql-action/analyze@v3
