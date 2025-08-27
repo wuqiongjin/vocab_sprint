@@ -49,6 +49,14 @@ class VocabularyBook:
             result = "Unknown word"
         return result
 
+    def get_all_words(self):
+        try:
+            result = self.word_entry_manager.get_word_entries()
+        except BaseError as e:
+            logger.ERROR(f"Get all words error, message: {e}")
+            result = []
+        return result
+
     def add_word(self, word: WordEntry):
         try:
             result = self.word_entry_manager.add_word_entry(word)

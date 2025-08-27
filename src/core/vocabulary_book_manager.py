@@ -1,6 +1,8 @@
 import json
 import os
 from dataclasses import asdict
+
+from src.utils.file_manager import FileManager
 from pathlib import Path
 from platformdirs import user_data_dir
 
@@ -66,9 +68,21 @@ class VocabularyBookManager:
 
     def create_vocabulary_book_from_data(self, book_info, data_url):
         logger.DEBUG("create_vocabulary_book_from_data in")
-        self.create_vocabulary_book(book_info)
+        if not self.create_vocabulary_book(book_info):
+            logger.ERROR(f"Create book {book_info.name} failed.")
+            return False
+        book = self.get_book(book_info.name)
 
-        return self.load_vocabulary_book(book_info)
+        try:
+            list_words = FileManager.parse_word_entries_from_csv(data_url)
+        except Exception as e:
+            self.delete_vocabulary_book(book_info.name, True)
+            logger.ERROR(f"Parse data failed, create book from data failed. error: {e}")
+            return False
+
+        for word in list_words:
+            book.add_word(word)
+        return True
 
     def load_vocabulary_book(self, book_info):
         logger.DEBUG("load_vocabulary_book in")

@@ -767,7 +767,7 @@ class DatabaseManager:
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
             self.conn = None
-        logger.INFO("Database connection closed")
+        logger.INFO(f"Database connection closed: {self.database_path}")
 
 
 
