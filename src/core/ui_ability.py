@@ -67,7 +67,7 @@ class MainWindow(QMainWindow):
         item_size = QSize(0, 100)
         item.setSizeHint(item_size)
 
-        vocabulary_book_ui = VocabularyBookUI(name, desc, item_size, self.widget_book_list, item)
+        vocabulary_book_ui = VocabularyBookUI(name, desc, item_size, self.widget_book_list, item, self.book_manager)
         self.widget_book_list.addItem(item)
         self.widget_book_list.setItemWidget(item, vocabulary_book_ui)
 
@@ -100,10 +100,12 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
 
 class VocabularyBookUI(QWidget):
-    def __init__(self, name, desc, size, list_widget, item):
+    def __init__(self, name, desc, size, list_widget, item, book_manager):
         super().__init__()
+        self.name = name
         self.list_widget = list_widget
         self.item = item
+        self.book_manager = book_manager
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -135,8 +137,11 @@ class VocabularyBookUI(QWidget):
         layout.addWidget(self.button_delete)
 
     def remove_self(self):
-        row = self.list_widget.row(self.item)
-        self.list_widget.takeItem(row)
+        if self.book_manager.delete_vocabulary_book(self.name):
+            row = self.list_widget.row(self.item)
+            self.list_widget.takeItem(row)
+        else:
+            MessageBox("Delete vocabulary book failed.")
 
 class NewBookDialog(QDialog):
     def __init__(self, parent=None):

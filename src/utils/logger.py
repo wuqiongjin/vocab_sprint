@@ -33,7 +33,7 @@ class ColoredFormatter(logging.Formatter):
         return f"{color}{log_message}{Style.RESET_ALL}"
 
 class Logger:
-    def __init__(self, name="vocab_logger", level=logging.INFO):
+    def __init__(self, name="vocab_logger", level=logging.DEBUG):
         self.log_dir = user_data_dir("logs", APP_NAME)
         self.logger = logging.getLogger(name)
 
@@ -46,7 +46,7 @@ class Logger:
         # create a file handler
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
-        file_handler = logging.FileHandler(f"{self.log_dir}/{name}.log", mode="a")
+        file_handler = logging.FileHandler(f"{self.log_dir}/{name}.log", mode="a", encoding='utf-8')
 
         # create a formatter
         formatter = logging.Formatter(
