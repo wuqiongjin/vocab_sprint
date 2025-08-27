@@ -1,8 +1,7 @@
 import json
 import os
-from dataclasses import asdict
-
-from src.utils.file_manager import FileManager
+import csv
+from enum import Enum
 from pathlib import Path
 from platformdirs import user_data_dir
 
@@ -10,7 +9,7 @@ from src.core.vocabulary_book import VocabularyBook, VocabularyBookInfo, BookTyp
 from src.utils.database_manager import DatabaseManager, DataType
 from src.utils.logger import Logger, APP_NAME
 from src.core.word_entry_manager import WordEntryManager
-from src.core.word_entry import WordEntry
+from src.core.word_entry import WordEntry, PartOfSpeech
 from src.utils.exceptions import BaseError
 
 logger = Logger("vocabulary_book_manager")
@@ -19,6 +18,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = Path(user_data_dir("data", APP_NAME))
 WORD_ENTRY_KEY = "WordEntries"
 DATABASE_URL_KEY = "database_url"
+
+class ExportType(Enum):
+    STANDARD = "standard",
+    RAW = "raw file"
 
 class VocabularyBookManager:
     def __init__(self, user_name = "default"):
@@ -74,7 +77,7 @@ class VocabularyBookManager:
         book = self.get_book(book_info.name)
 
         try:
-            list_words = FileManager.parse_word_entries_from_csv(data_url)
+            list_words = self.parse_word_entries_from_csv(data_url)
         except Exception as e:
             self.delete_vocabulary_book(book_info.name, True)
             logger.ERROR(f"Parse data failed, create book from data failed. error: {e}")
@@ -107,6 +110,17 @@ class VocabularyBookManager:
             return False
         vocabulary_book = VocabularyBook(book_info, word_entry_manager)
         self.vocabulary_books[book_name] = vocabulary_book
+        return True
+
+    def export_vocabulary_book(self, book_name, output_path, export_type = ExportType.STANDARD):
+        logger.DEBUG("export_vocabulary_book in")
+        if book_name not in self.vocabulary_books:
+            logger.INFO(f"No vocabulary book called {book_name}.")
+            return False
+        book = self.vocabulary_books[book_name]
+        word_entries = book.word_entry_manager.get_word_entries().values()
+        logger.ERROR(f"lzh {type(word_entries)} {word_entries}")
+        self.generate_csv_from_word_entries(word_entries, output_path, export_type)
         return True
 
     def delete_vocabulary_book(self, book_name, force_delete = False):
@@ -199,3 +213,141 @@ class VocabularyBookManager:
             database_path = self.book_dir / (book_name + f"_{counter}.db")
             counter += 1
         return database_path
+
+    @staticmethod
+    def parse_word_entries_from_csv(csv_path):
+        list_dict = csv_to_dict_list(csv_path)
+        list_word_entry = []
+        for dicts in list_dict:
+            if check_keys_required_for_raw_file(dicts):
+                try:
+                    word = dicts["word"]
+                    phonetic = dicts["phonetic"]
+                    definition = dicts["definition"]
+                    uk_phonetic, us_phonetic = split_phonetics(phonetic)
+                    definition_dict = split_definition(definition)
+                    word_entry = WordEntry(word, uk_phonetic, us_phonetic, definition_dict)
+                    list_word_entry.append(word_entry)
+                except BaseError as e:
+                    logger.ERROR(f"Data Invalid: {dicts['word']}, error: {e}")
+                    continue
+            elif check_keys_required_for_standard_file(dicts):
+                try:
+                    word = dicts["Word"]
+                    uk_phonetic = dicts["Phonetic_UK"]
+                    us_phonetic = dicts["Phonetic_US"]
+                    definition_dict = {}
+                    for key in dicts:
+                        if key != "Word" or "Phonetic_UK" or "Phonetic_US":
+                            definition_dict[key] = dicts[key]
+                    word_entry = WordEntry(word, uk_phonetic, us_phonetic, definition_dict)
+                    list_word_entry.append(word_entry)
+                except BaseError as e:
+                    logger.ERROR(f"Data Invalid: {dicts['Word']}, error: {e}")
+                    continue
+        return list_word_entry
+
+    @staticmethod
+    def generate_csv_from_word_entries(list_word_entry: list[WordEntry], csv_path, export_type):
+        if export_type == ExportType.STANDARD:
+            list_dict = word_entry_to_dict_standard(list_word_entry)
+        elif export_type == ExportType.RAW:
+            list_dict = word_entry_to_dict_raw(list_word_entry)
+        else:
+            list_dict = []
+        if not list_dict:
+            logger.ERROR("empty data.")
+            return False
+        fieldnames = list_dict[0].keys()
+        print("lzh", fieldnames)
+        try:
+            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in list_dict:
+                    writer.writerow(row)
+            return True
+        except BaseError as e:
+            return False
+
+def word_entry_to_dict_standard(list_word_entry: list[WordEntry]):
+    list_dict = []
+    for word_entry in list_word_entry:
+        output_dict = {
+            "Word": word_entry.word,
+            "Phonetic_UK": word_entry.phonetic_UK,
+            "Phonetic_US": word_entry.phonetic_US
+        }
+        for part in PartOfSpeech:
+            if part in word_entry.interpretations:
+                output_dict[str(part)] = word_entry.interpretations[part]
+            else:
+                output_dict[str(part)] = ""
+
+        list_dict.append(output_dict)
+    return list_dict
+
+def word_entry_to_dict_raw(list_word_entry: list[WordEntry]):
+    list_dict = []
+    for word_entry in list_word_entry:
+        output_dict = {
+            "word": word_entry.word,
+            "phonetic": "英" + word_entry.phonetic_UK + "美" + word_entry.phonetic_US,
+            "definition": "||".join(str(v) for v in word_entry.interpretations.values())
+        }
+        list_dict.append(output_dict)
+        print(output_dict)
+    return list_dict
+
+def check_keys_required_for_standard_file(dicts) -> bool:
+    required_keys = PartOfSpeech.get_all_values() + ["Word", "Phonetic_UK", "Phonetic_US"]
+    return all(key in dicts for key in required_keys)
+
+def check_keys_required_for_raw_file(dicts) -> bool:
+    required_keys = ["word", "phonetic", "definition"]
+    return all(key in dicts for key in required_keys)
+
+def csv_to_dict_list(csv_path: str, encoding: str = "utf-8"):
+    dict_list = []
+    with open(csv_path, "r", encoding=encoding, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            dict_list.append(row)
+    return dict_list
+
+def split_phonetics(text: str):
+    parts = [p for p in text.split('/') if p.strip()]
+    if len(parts) >= 4:
+        uk_phonetic = f"/{parts[1]}/"
+        us_phonetic = f"/{parts[3]}/"
+        return uk_phonetic, us_phonetic
+    else:
+        raise ValueError(f"Invalid phonetic format：{text}")
+
+def detect_definition(text: str):
+    type_mapping = {
+        "n": PartOfSpeech.NOUN,
+        "v": PartOfSpeech.VERB,
+        "adj": PartOfSpeech.ADJ,
+        "adv": PartOfSpeech.ADV,
+        "prep": PartOfSpeech.PREP,
+        "conj": PartOfSpeech.CONJ,
+        "pron": PartOfSpeech.PRON,
+        "num": PartOfSpeech.NUM,
+        "int": PartOfSpeech.INTJ,
+        "art": PartOfSpeech.ART,
+        "det": PartOfSpeech.DET,
+        "aux": PartOfSpeech.AUX
+    }
+    text = text.strip()
+    for prefix, definition_type in type_mapping.items():
+        if text.startswith(prefix):
+            return definition_type
+    return PartOfSpeech.OTHERS
+
+def split_definition(text: str):
+    list_def = text.split('||')
+    dict_def = {}
+    for definition in list_def:
+        dict_def[detect_definition(definition)] = definition
+    return dict_def
