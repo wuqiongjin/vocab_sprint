@@ -2,9 +2,14 @@ import logging
 import os
 
 from colorama import Fore, Style
+from datetime import datetime
 from platformdirs import user_data_dir
 
 APP_NAME = "vocab_sprint"
+
+# generate unique log file name for each run
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+LOG_FILE_NAME = f"log_{TIMESTAMP}.log"
 
 # log directory
 # Windows: C:\Users\<user>\AppData\Local\{APP_NAME}\Logs
@@ -33,12 +38,16 @@ class ColoredFormatter(logging.Formatter):
         return f"{color}{log_message}{Style.RESET_ALL}"
 
 class Logger:
-    def __init__(self, name="vocab_logger", level=logging.DEBUG):
+    def __init__(self, module_name: str, level=logging.DEBUG):
         self.log_dir = user_data_dir("logs", APP_NAME)
-        self.logger = logging.getLogger(name)
+        self.logger = logging.getLogger(module_name)
 
         # set default level to info
         self.logger.setLevel(level)
+
+        # check if logger already has handler
+        if self.logger.handlers:
+            return
 
         # create a console handler
         console_handler = logging.StreamHandler()
@@ -46,7 +55,7 @@ class Logger:
         # create a file handler
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
-        file_handler = logging.FileHandler(f"{self.log_dir}/{name}.log", mode="a", encoding='utf-8')
+        file_handler = logging.FileHandler(f"{self.log_dir}/{LOG_FILE_NAME}", mode="a", encoding='utf-8')
 
         # create a formatter
         formatter = logging.Formatter(
