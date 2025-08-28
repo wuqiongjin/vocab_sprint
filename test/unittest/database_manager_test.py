@@ -212,7 +212,7 @@ def test_create_table_and_insert_data():
         # 验证数据插入
         data = db.export_table_data("users")
         assert len(data) == 1
-        assert data[1][1] == "Alice"  # data[1] 因为id=1是第一列
+        assert data[0]['name'] == "Alice"
         
         # 测试唯一约束
         duplicate_data = {
@@ -427,9 +427,9 @@ def test_select_and_export_data():
 
         # 测试 export_table_data
         exported = db.export_table_data("users")
-        assert isinstance(exported, dict)
-        assert all(isinstance(k, int) for k in exported.keys())
-        assert exported[1][1] == "Alice"
+        assert isinstance(exported, list)
+        assert all(isinstance(d, dict) for d in exported)
+        assert exported[0]['name'] == "Alice"
 
     finally:
         db.close()

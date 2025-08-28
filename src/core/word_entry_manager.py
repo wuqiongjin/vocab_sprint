@@ -35,7 +35,7 @@ class WordEntryManager:
 
         self.table_name = table_name
         # load data from database
-        self.word_dict = self.database_manager.export_table_data(table_name)
+        self.word_dict = {entry_dict['Word']: WordEntry.from_flat_dict(entry_dict) for entry_dict in self.database_manager.export_table_data(table_name)}
 
     def add_word_entry(self, word_entry: WordEntry) -> bool:
         if word_entry.word in self.word_dict:
@@ -72,48 +72,3 @@ class WordEntryManager:
     
     def get_all_word_entries(self):
         return list(self.word_dict.values())
-
-
-# # test
-# if __name__ == "__main__":
-#     database_manager = DatabaseManager("./test.db", True)
-#     columns = [
-#         ("Word", DataType.TEXT),
-#         ("Phonetic_UK", DataType.TEXT),
-#         ("Phonetic_US", DataType.TEXT),
-#         ("Interp_Noun", DataType.TEXT),
-#         ("Interp_Verb", DataType.TEXT),
-#         ("Interp_Adj", DataType.TEXT),
-#         ("Interp_Adv", DataType.TEXT),
-#         ("Interp_Pron", DataType.TEXT),
-#         ("Interp_Prep", DataType.TEXT),
-#         ("Interp_Conj", DataType.TEXT),
-#         ("Interp_Intj", DataType.TEXT),
-#         ("Interp_Art", DataType.TEXT),
-#         ("Interp_Det", DataType.TEXT),
-#         ("Interp_Num", DataType.TEXT),
-#         ("Interp_Aux", DataType.TEXT),
-#         ("Interp_Others", DataType.TEXT),
-#     ]
-#     config = {
-#         "primary_key": "Word",
-#         "unique_keys": ["Word"],
-#         "not_null_keys": ["Word", "Phonetic_UK", "Phonetic_US"],
-#     }
-#     print(f"create status: {database_manager.create_table('WordEntry', columns, config)}")
-
-#     word_entry_manager = WordEntryManager(database_manager, "WordEntry")
-#     print(word_entry_manager.add_word_entry(WordEntry("rapid", "/ˈræpɪd/", "/ˈræpɪd/", "快速")))
-#     print(word_entry_manager.add_word_entry(WordEntry("hello", "/həˈloʊ/", "/həˈloʊ/", "你好")))
-#     print(word_entry_manager.add_word_entry(WordEntry("world", "/ˈwɜːld/", "/ˈwɜːld/", "世界")))
-#     print(word_entry_manager.add_word_entry(WordEntry("speed", "/ˈspiːd/", "/ˈspiːd/", "速度")))
-
-#     print(word_entry_manager.get_all_words())
-#     print(word_entry_manager.get_all_word_entries())
-#     print(word_entry_manager.get_word_entry("hello"))
-#     print(word_entry_manager.get_word_entries())
-#     print(word_entry_manager.get_word_entry("hello2"))
-#     print(word_entry_manager.get_word_entries())
-
-#     word_entry_manager.remove_word_entry("hello")
-#     word_entry_manager.remove_word_entry("hello2")

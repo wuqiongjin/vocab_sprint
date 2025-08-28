@@ -678,15 +678,21 @@ class DatabaseManager:
         result = self.select_one(query)
         return result["count"] if result else 0
 
-    def export_table_data(self, table_name: str) -> dict:
+    def export_table_data(self, table_name: str) -> list[dict]:
         """
         export all data from the database, return a dictionary, the key is word, the value is the row data
+
+        Returns: [{field1: value1, field2: value2, ...}, {field1: value1, field2, value2, ...}, ...]
         """
         self.cursor.execute(f"SELECT * FROM {table_name}")
         rows = self.cursor.fetchall()
-        data = {}
+        data = []
+        table_columns = [col["name"] for col in self.get_table_columns(table_name)]
         for row in rows:
-            data[row[0]] = row[:]
+            entry_dict = {}
+            for index, col_name in enumerate(table_columns):
+                entry_dict[col_name] = row[index]
+            data.append(entry_dict)
         return data
 
     def execute_raw_sql(self, sql: str, params: tuple = None) -> List[Dict]:
@@ -768,64 +774,3 @@ class DatabaseManager:
             self.conn.close()
             self.conn = None
         logger.INFO(f"Database connection closed: {self.database_path}")
-
-
-
-# # 测试
-# if __name__ == "__main__":
-#  #   # test create table, insert data, export table data
-#     database_manager = DatabaseManager("./test.db", True)
-#     colmns = [
-#         ("word", DataType.TEXT),
-#         ("phonetic_UK", DataType.TEXT),
-#         ("phonetic_US", DataType.TEXT),
-#         ("interp_Noun", DataType.TEXT),
-#         ("interp_Verb", DataType.TEXT),
-#         ("interp_Adj", DataType.TEXT),
-#         ("interp_Adv", DataType.TEXT),
-#     ]
-#     database_manager.create_table("WordEntry", colmns)
-#     database_manager.insert_data("WordEntry", {
-#         "word": "hello",
-#         "phonetic_UK": "həˈləʊ",
-#         "phonetic_US": "həˈləʊ",
-#         "interp_Noun": "a greeting",
-#         "interp_Verb": "to greet",
-#     })
-#     data = database_manager.export_table_data("WordEntry")
-#     print(data)
-
-
-    # test insert WordEntry to database
-#     from dataclasses import dataclass
-
-    # @dataclass
-    # class WordEntry:
-    #     word: str
-    #     phonetic_UK: str
-    #     phonetic_US: str
-    #     interp_Noun: str = ""
-    #     interp_Verb: str = ""
-    #     interp_Adj: str = ""
-    #     interp_Adv: str = ""
-    #     interp_Pron: str = ""
-    #     interp_Prep: str = ""
-    #     interp_Conj: str = ""
-    #     interp_Intj: str = ""
-    #     interp_Art: str = ""
-    #     interp_Det: str = ""
-    #     interp_Num: str = ""
-    #     interp_Aux: str = ""
-    #     interp_Others: str = ""
-
-    # database_manager.insert_data("WordEntry", WordEntry(
-    #     word="hello2",
-    #     phonetic_UK="həˈləʊ",
-    #     phonetic_US="həˈləʊ",
-    #     interp_Noun="a greeting",
-    #     interp_Verb="to greet",
-    #     interp_Adj="friendly",
-    #     interp_Adv="gently",
-    # ).__dict__)
-
-    # print(database_manager.export_table_data("WordEntry"))
