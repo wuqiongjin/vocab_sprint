@@ -28,8 +28,12 @@ EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK = "Phonetic_UK"
 EXPORT_FIELD_KEY_STANDARD_PHONETIC_US = "Phonetic_US"
 
 class ExportType(Enum):
-    STANDARD = "standard",
-    RAW = "raw file"
+    CSV_STANDARD = "csv_standard",
+    CSV_RAW = "csv_raw"
+
+    @classmethod
+    def get_all_name(cls) -> list[str]:
+        return [pos.name for pos in cls]
 
 class VocabularyBookManager:
     def __init__(self, user_name = "default"):
@@ -120,7 +124,7 @@ class VocabularyBookManager:
         self.vocabulary_books[book_name] = vocabulary_book
         return True
 
-    def export_vocabulary_book(self, book_name, output_path, export_type = ExportType.STANDARD):
+    def export_vocabulary_book(self, book_name, output_path, export_type = ExportType.CSV_STANDARD):
         logger.DEBUG("export_vocabulary_book in")
         if book_name not in self.vocabulary_books:
             logger.INFO(f"No vocabulary book called {book_name}.")
@@ -256,9 +260,9 @@ class VocabularyBookManager:
 
     @staticmethod
     def generate_csv_from_word_entries(list_word_entry: list[WordEntry], csv_path, export_type):
-        if export_type == ExportType.STANDARD:
+        if export_type == ExportType.CSV_STANDARD:
             list_dict = word_entry_to_dict_standard(list_word_entry)
-        elif export_type == ExportType.RAW:
+        elif export_type == ExportType.CSV_RAW:
             list_dict = word_entry_to_dict_raw(list_word_entry)
         else:
             list_dict = []
