@@ -230,21 +230,21 @@ def test_get_methods():
         # 添加几个单词
         words = [
             WordEntry(
-                word="word1", 
-                phonetic_UK="/uk1/", 
-                phonetic_US="/us1/", 
+                word="word1",
+                phonetic_UK="/uk1/",
+                phonetic_US="/us1/",
                 interpretations={PartOfSpeech.NOUN: "解释1", PartOfSpeech.VERB: "动词1"}
             ),
             WordEntry(
-                word="word2", 
-                phonetic_UK="/uk2/", 
-                phonetic_US="/us2/", 
+                word="word2",
+                phonetic_UK="/uk2/",
+                phonetic_US="/us2/",
                 interpretations={PartOfSpeech.NOUN: "解释2", PartOfSpeech.VERB: "动词2"}
             ),
             WordEntry(
                 word="word3", 
-                phonetic_UK="/uk3/", 
-                phonetic_US="/us3/", 
+                phonetic_UK="/uk3/",
+                phonetic_US="/us3/",
                 interpretations={PartOfSpeech.NOUN: "解释3", PartOfSpeech.VERB: "动词3"}
             ),
         ]

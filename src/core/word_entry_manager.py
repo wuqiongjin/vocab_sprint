@@ -1,9 +1,7 @@
 from src.core.word_entry import WordEntry
-from src.utils.database_manager import DatabaseManager, DataType
+from src.utils.database_manager import DatabaseManager
 from src.utils.logger import Logger
 from src.utils.exceptions import TableNotFoundError, ColumnNotFoundError, InvalidTableStructureError
-
-from dataclasses import fields
 
 logger = Logger("word_entry_manager")
 
