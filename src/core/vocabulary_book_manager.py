@@ -130,7 +130,7 @@ class VocabularyBookManager:
             logger.INFO(f"No vocabulary book called {book_name}.")
             return False
         book = self.vocabulary_books[book_name]
-        word_entries = book.word_entry_manager.get_word_entries().values()
+        word_entries = book.word_entry_manager.get_word_dict().values()
         self.generate_csv_from_word_entries(word_entries, output_path, export_type)
         return True
 

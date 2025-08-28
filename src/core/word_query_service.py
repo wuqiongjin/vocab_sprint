@@ -26,7 +26,6 @@ class WordQueryService:
         self.indexes: dict[InvertIndex, dict[str, List[WordEntry]]] = {
             InvertIndex.TRANSLATION: {},
         }
-
         # Real-time search attributes
         self.stop_search = False
         self.last_query = ""
@@ -45,16 +44,25 @@ class WordQueryService:
 
         # Build indexes
         self.build_indexes()
-    
+        # register callback to rebuild indexes when word_entry_manager is updated
+        self.word_entry_manager.add_callback(self.build_indexes())
+
     def build_indexes(self):
         """
         interpretations -> word
         """
-        for word, entry in self.word_entry_manager.get_word_entries().items():
-            # build translation index
-            for meaning in entry.interpretations.values():
-                self._add_to_index(InvertIndex.TRANSLATION, meaning, entry)
-        logger.INFO(f"Built translation index finished with {len(self.indexes[InvertIndex.TRANSLATION])} entries")
+        with self.lock:
+            # Clear indexes
+            self.indexes = {
+                InvertIndex.TRANSLATION: {},
+            }
+
+            for entry in self.word_entry_manager.get_word_dict().values():
+                # build translation index
+                for meaning in entry.interpretations.values():
+                    if meaning:
+                        self._add_to_index(InvertIndex.TRANSLATION, meaning, entry)
+            logger.INFO(f"Built translation index finished with {len(self.indexes[InvertIndex.TRANSLATION])} entries")
 
     def _add_to_index(self, index_type: InvertIndex, key: str, entry: WordEntry):
         if key not in self.indexes[index_type]:
@@ -84,15 +92,19 @@ class WordQueryService:
         partial_results = self.partial_search(text)
         results.extend(partial_results)
 
-        # remove duplicates
-        unique_results = list({entry.word: entry for entry in results}.values())    # preserve order
+        # remove duplicates and preserve order
+        unique_results = list({entry.word: entry for entry in results}.values())    # 
         if len(unique_results) >= 3:
+            logger.INFO(f"Query '{text}' returned {len(unique_results)} results")
             return unique_results
 
         # 4. fuzzy search
         unique_results.extend(self.fuzzy_search(text))
-        return list({entry.word: entry for entry in unique_results}.values())        # remove duplicates, preserve order
 
+        # remove duplicates and preserve order
+        unique_results = list({entry.word: entry for entry in unique_results}.values())
+        logger.INFO(f"Query '{text}' returned {len(unique_results)} results")
+        return unique_results
 
     def partial_search(self, text: str) -> list[WordEntry]:
         """
@@ -101,7 +113,7 @@ class WordQueryService:
         results = []
 
         # 1. partial search by word
-        for word, entry in self.word_entry_manager.get_word_entries().items():
+        for word, entry in self.word_entry_manager.get_word_dict().items():
             if text.lower() in word.lower():
                 results.append(entry)
 
@@ -123,7 +135,7 @@ class WordQueryService:
         if not text:
             return results
 
-        for word, entry in self.word_entry_manager.get_word_entries().items():
+        for word, entry in self.word_entry_manager.get_word_dict().items():
             # compute similarity
             ratio = fuzz.ratio(text.lower(), word.lower())
             if ratio >= threshold:
@@ -137,8 +149,10 @@ class WordQueryService:
         try:
             results = self.query(query_text)
             self.result_queue.put((query_text, results, None))
+            logger.INFO(f"Executed query task for: '{query_text}' with {len(results)} results")
         except Exception as e:
             self.result_queue.put((query_text, None, e))
+            logger.ERROR(f"Error executing query task for: '{query_text}' with error: {e}")
 
     def _process_query_results(self):
         """Process query results from the queue"""
@@ -155,9 +169,11 @@ class WordQueryService:
                             print(f"Query error: {error}")
                         else:
                             # Call callback function
+                            logger.INFO(f"Calling search results callback with {len(results)} results")
                             self.search_results_callback(results)
             except:
                 # Timeout is expected, continue loop
+                logger.DEBUG("No query results in queue")
                 pass
 
     def start_realtime_search(self, callback: Callable[[List[WordEntry]], None]):
@@ -200,6 +216,11 @@ class WordQueryService:
         Update query text with debounce mechanism
         """
         with self.lock:
+            # Check if real-time search is started
+            if self.search_results_callback is None:
+                print("Warning: Real-time search not started. Call start_realtime_search() first.")
+                return
+
             self.last_query = query_text
 
             # Cancel previous timer
@@ -213,7 +234,8 @@ class WordQueryService:
     def _submit_query_task(self):
         """Submit query task to thread pool"""
         with self.lock:
-            if self.stop_search or not self.last_query:
+            # Additional check to prevent unnecessary query execution
+            if self.stop_search or not self.last_query or self.search_results_callback is None:
                 return
 
             # Cancel previous query task if still running
@@ -222,8 +244,11 @@ class WordQueryService:
 
             # Submit new query task to thread pool
             self.future = self.executor.submit(self._execute_query_async, self.last_query)
+            logger.INFO(f"Submitted query task for '{self.last_query}'")
 
     def shutdown(self):
         """Shutdown query service and release resources"""
         self.stop_realtime_search()
         self.executor.shutdown(wait=False)
+        self.word_entry_manager.remove_callback(self.build_indexes())
+        logger.INFO("WordQueryService shutdown")

@@ -51,7 +51,7 @@ class VocabularyBook:
 
     def get_all_words(self):
         try:
-            result = self.word_entry_manager.get_word_entries()
+            result = self.word_entry_manager.get_word_dict()
         except BaseError as e:
             logger.ERROR(f"Get all words error, message: {e}")
             result = []

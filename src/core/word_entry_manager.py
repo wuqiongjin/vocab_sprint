@@ -3,6 +3,8 @@ from src.utils.database_manager import DatabaseManager
 from src.utils.logger import Logger
 from src.utils.exceptions import TableNotFoundError, ColumnNotFoundError, InvalidTableStructureError
 
+from typing import Callable
+
 logger = Logger("word_entry_manager")
 
 class WordEntryManager:
@@ -11,7 +13,7 @@ class WordEntryManager:
         # check table exist
         if not self.database_manager.check_table_exist(table_name):
             raise TableNotFoundError(table_name)
-        
+
         word_entry_columns = WordEntry.get_database_columns()
         table_columns = [col["name"] for col in self.database_manager.get_table_columns(table_name)]
 
@@ -33,7 +35,30 @@ class WordEntryManager:
 
         self.table_name = table_name
         # load data from database
-        self.word_dict = {entry_dict['Word']: WordEntry.from_flat_dict(entry_dict) for entry_dict in self.database_manager.export_table_data(table_name)}
+        self.word_dict = {entry_dict['Word']: WordEntry.from_flat_dict(entry_dict) \
+                          for entry_dict in self.database_manager.export_table_data(table_name)}
+
+        # save callbacks for notifying when the word_dict is updated
+        self.callbacks = []
+
+    def add_callback(self, callback: Callable[[], None]):
+        self.callbacks.append(callback)
+
+    def remove_callback(self, callback: Callable[[], None]) -> bool:
+        if callback in self.callbacks:
+            self.callbacks.remove(callback)
+            return True
+        else:
+            logger.WARN(f"Callback {callback} not found in {self.callbacks}")
+            return False
+
+    def _notify_callbacks(self):
+        for callback in self.callbacks:
+            try:
+                logger.DEBUG(f"Notification: Calling callback {callback}")
+                callback()
+            except Exception as e:
+                logger.ERROR(f"Notification: Callback execution failed: {e}")
 
     def add_word_entry(self, word_entry: WordEntry) -> bool:
         if word_entry.word in self.word_dict:
@@ -41,13 +66,8 @@ class WordEntryManager:
             return False
         self.word_dict[word_entry.word] = word_entry
         self.database_manager.insert_data(self.table_name, word_entry.to_flat_dict())
+        self._notify_callbacks()
         return True
-
-    def get_word_entries(self):
-        return self.word_dict
-    
-    def get_word_entry(self, word: str):
-        return self.word_dict.get(word)
 
     def remove_word_entry(self, word: str) -> bool:
         if word not in self.word_dict:
@@ -55,18 +75,26 @@ class WordEntryManager:
             return False
         self.word_dict.pop(word)
         self.database_manager.delete_data(self.table_name, f"word='{word}'")
+        self._notify_callbacks()
         return True
-         
+
     def update_word_entry(self, word: str, word_entry: WordEntry) -> bool:
         if word not in self.word_dict:
             logger.ERROR(f"update_word_entry failed! word: {word} not found in {self.table_name}")
             return False
         self.word_dict[word] = word_entry
         self.database_manager.update_data(self.table_name, word_entry.to_flat_dict(), f"word='{word}'")
+        self._notify_callbacks()
         return True
+
+    def get_word_dict(self):
+        return self.word_dict
+
+    def get_word_entry(self, word: str):
+        return self.word_dict.get(word)
 
     def get_all_words(self):
         return list(self.word_dict.keys())
-    
+
     def get_all_word_entries(self):
         return list(self.word_dict.values())

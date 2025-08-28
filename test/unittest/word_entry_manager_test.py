@@ -277,7 +277,7 @@ def test_get_methods():
         assert entry_none is None
         
         # 测试获取所有条目字典
-        entries_dict = manager.get_word_entries()
+        entries_dict = manager.get_word_dict()
         assert isinstance(entries_dict, dict)
         assert len(entries_dict) == 3
         

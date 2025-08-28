@@ -71,6 +71,8 @@ class WordEntry:
         
         interpretations_dict = {}
         for pos_str, meaning in data.get("Interpretations", {}).items():
+            if not meaning:
+                continue
             # find the corresponding enum value from string
             for pos_enum in PartOfSpeech:
                 if pos_enum.value == pos_str:
@@ -94,6 +96,8 @@ class WordEntry:
         interpretations = {}
         for pos in PartOfSpeech:
             pos_value = pos.value
+            if not flat_dict.get(pos_value, ""):
+                continue
             if pos_value in flat_dict and flat_dict[pos_value]:
                 interpretations[pos] = flat_dict[pos_value]
         

@@ -28,4 +28,6 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m test.run_unittests
+          cd ./test
+          PYTHONPATH=../ python run_unittests.py
+          cd -

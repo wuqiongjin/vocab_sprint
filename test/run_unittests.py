@@ -2,16 +2,16 @@ import os
 import subprocess
 import sys
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# 确保 src 在 sys.path 中
+sys.path.insert(0, PROJECT_ROOT)
+
 IGNORE_FILES = [
     "__init__.py",
-    "test_run_all_tests.py"
+    "run_unittests.py"
 ]
 
-def run_tests_in_dir(test_dir="test/unittest"):
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    # 确保 src 在 sys.path 中
-    sys.path.insert(0, project_root)
-
+def run_tests_in_dir(test_dir):
     # 收集 test 目录下所有 .py 文件
     test_files = []
     for root, _, files in os.walk(test_dir):
@@ -30,8 +30,9 @@ def run_tests_in_dir(test_dir="test/unittest"):
         print(f"▶ Running {test_file} ...")
         env = os.environ.copy()
         # 重点：在子进程里也传递 PYTHONPATH
-        env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
-        result = subprocess.run([sys.executable, test_file], capture_output=True, text=True, encoding='utf-8', env=env)
+        env["PYTHONPATH"] = PROJECT_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+        result = subprocess.run([sys.executable, test_file], capture_output=True, text=True, \
+                                encoding='utf-8', errors='replace', env=env)
 
         if result.returncode == 0:
             print(f"✅ {test_file} [PASSED]\n")
@@ -50,4 +51,4 @@ def run_tests_in_dir(test_dir="test/unittest"):
 
 
 if __name__ == "__main__":
-    run_tests_in_dir("test/unittest")
+    run_tests_in_dir("unittest")

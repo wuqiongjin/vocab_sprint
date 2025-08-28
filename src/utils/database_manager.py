@@ -147,7 +147,7 @@ class DatabaseManager:
         try:
             self.close()
         except:
-            Logger.ERROR("Error while closing database connection.")
+            logger.ERROR("Error while closing database connection.")
             pass  # ignore any exception in destructor
 
     def create_table(self, table_name: str, columns: list[tuple[str, DataType]],
