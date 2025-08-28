@@ -19,6 +19,14 @@ DATA_PATH = Path(user_data_dir("data", APP_NAME))
 WORD_ENTRY_KEY = "WordEntries"
 DATABASE_URL_KEY = "database_url"
 
+EXPORT_FIELD_KEY_RAW_WORD = "word"
+EXPORT_FIELD_KEY_RAW_PHONETIC = "phonetic"
+EXPORT_FIELD_KEY_RAW_DEFINITION = "definition"
+
+EXPORT_FIELD_KEY_STANDARD_WORD = "Word"
+EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK = "Phonetic_UK"
+EXPORT_FIELD_KEY_STANDARD_PHONETIC_US = "Phonetic_US"
+
 class ExportType(Enum):
     STANDARD = "standard",
     RAW = "raw file"
@@ -119,7 +127,6 @@ class VocabularyBookManager:
             return False
         book = self.vocabulary_books[book_name]
         word_entries = book.word_entry_manager.get_word_entries().values()
-        logger.ERROR(f"lzh {type(word_entries)} {word_entries}")
         self.generate_csv_from_word_entries(word_entries, output_path, export_type)
         return True
 
@@ -157,9 +164,9 @@ class VocabularyBookManager:
     @staticmethod
     def create_word_entry_table(database_manager):
         columns = [
-            ("Word", DataType.TEXT),
-            ("Phonetic_UK", DataType.TEXT),
-            ("Phonetic_US", DataType.TEXT),
+            (EXPORT_FIELD_KEY_STANDARD_WORD, DataType.TEXT),
+            (EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK, DataType.TEXT),
+            (EXPORT_FIELD_KEY_STANDARD_PHONETIC_US, DataType.TEXT),
             ("Interp_Noun", DataType.TEXT),
             ("Interp_Verb", DataType.TEXT),
             ("Interp_Adj", DataType.TEXT),
@@ -175,7 +182,7 @@ class VocabularyBookManager:
             ("Interp_Others", DataType.TEXT),
         ]
         config = {
-            "primary_key": "Word",
+            "primary_key": EXPORT_FIELD_KEY_STANDARD_WORD,
         }
         database_manager.create_table("WordEntries", columns, config)
 
@@ -221,9 +228,9 @@ class VocabularyBookManager:
         for dicts in list_dict:
             if check_keys_required_for_raw_file(dicts):
                 try:
-                    word = dicts["word"]
-                    phonetic = dicts["phonetic"]
-                    definition = dicts["definition"]
+                    word = dicts[EXPORT_FIELD_KEY_RAW_WORD]
+                    phonetic = dicts[EXPORT_FIELD_KEY_RAW_PHONETIC]
+                    definition = dicts[EXPORT_FIELD_KEY_RAW_DEFINITION]
                     uk_phonetic, us_phonetic = split_phonetics(phonetic)
                     definition_dict = split_definition(definition)
                     word_entry = WordEntry(word, uk_phonetic, us_phonetic, definition_dict)
@@ -233,12 +240,12 @@ class VocabularyBookManager:
                     continue
             elif check_keys_required_for_standard_file(dicts):
                 try:
-                    word = dicts["Word"]
-                    uk_phonetic = dicts["Phonetic_UK"]
-                    us_phonetic = dicts["Phonetic_US"]
+                    word = dicts[EXPORT_FIELD_KEY_STANDARD_WORD]
+                    uk_phonetic = dicts[EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK]
+                    us_phonetic = dicts[EXPORT_FIELD_KEY_STANDARD_PHONETIC_US]
                     definition_dict = {}
                     for key in dicts:
-                        if key != "Word" or "Phonetic_UK" or "Phonetic_US":
+                        if key != EXPORT_FIELD_KEY_STANDARD_WORD or EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK or EXPORT_FIELD_KEY_STANDARD_PHONETIC_US:
                             definition_dict[key] = dicts[key]
                     word_entry = WordEntry(word, uk_phonetic, us_phonetic, definition_dict)
                     list_word_entry.append(word_entry)
@@ -259,7 +266,6 @@ class VocabularyBookManager:
             logger.ERROR("empty data.")
             return False
         fieldnames = list_dict[0].keys()
-        print("lzh", fieldnames)
         try:
             with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -273,38 +279,26 @@ class VocabularyBookManager:
 def word_entry_to_dict_standard(list_word_entry: list[WordEntry]):
     list_dict = []
     for word_entry in list_word_entry:
-        output_dict = {
-            "Word": word_entry.word,
-            "Phonetic_UK": word_entry.phonetic_UK,
-            "Phonetic_US": word_entry.phonetic_US
-        }
-        for part in PartOfSpeech:
-            if part in word_entry.interpretations:
-                output_dict[str(part)] = word_entry.interpretations[part]
-            else:
-                output_dict[str(part)] = ""
-
-        list_dict.append(output_dict)
+        list_dict.append(word_entry.to_flat_dict())
     return list_dict
 
 def word_entry_to_dict_raw(list_word_entry: list[WordEntry]):
     list_dict = []
     for word_entry in list_word_entry:
         output_dict = {
-            "word": word_entry.word,
-            "phonetic": "英" + word_entry.phonetic_UK + "美" + word_entry.phonetic_US,
-            "definition": "||".join(str(v) for v in word_entry.interpretations.values())
+            EXPORT_FIELD_KEY_RAW_WORD: word_entry.word,
+            EXPORT_FIELD_KEY_RAW_PHONETIC: "英" + word_entry.phonetic_UK + "美" + word_entry.phonetic_US,
+            EXPORT_FIELD_KEY_RAW_DEFINITION: "||".join(str(v) for v in word_entry.interpretations.values())
         }
         list_dict.append(output_dict)
-        print(output_dict)
     return list_dict
 
 def check_keys_required_for_standard_file(dicts) -> bool:
-    required_keys = PartOfSpeech.get_all_values() + ["Word", "Phonetic_UK", "Phonetic_US"]
+    required_keys = PartOfSpeech.get_all_values() + [EXPORT_FIELD_KEY_STANDARD_WORD, EXPORT_FIELD_KEY_STANDARD_PHONETIC_UK, EXPORT_FIELD_KEY_STANDARD_PHONETIC_US]
     return all(key in dicts for key in required_keys)
 
 def check_keys_required_for_raw_file(dicts) -> bool:
-    required_keys = ["word", "phonetic", "definition"]
+    required_keys = [EXPORT_FIELD_KEY_RAW_WORD, EXPORT_FIELD_KEY_RAW_PHONETIC, EXPORT_FIELD_KEY_RAW_DEFINITION]
     return all(key in dicts for key in required_keys)
 
 def csv_to_dict_list(csv_path: str, encoding: str = "utf-8"):
