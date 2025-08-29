@@ -1,15 +1,15 @@
 import sys
 
-from PyQt5.QtCore import QSize, pyqtSignal
+from PyQt5.QtCore import QSize, pyqtSignal, Qt
 from PyQt5.QtGui import QIcon, QResizeEvent, QFont
 from PyQt5.QtWidgets import QMainWindow, QApplication, QLabel, QListWidget, QPushButton, QGroupBox, QHBoxLayout, \
-    QWidget, QVBoxLayout, QListWidgetItem, QDialog, QLineEdit
+    QWidget, QVBoxLayout, QListWidgetItem, QDialog, QLineEdit, QComboBox, QDialogButtonBox, QFormLayout
 
 from src.core.vocabulary_book import VocabularyBookInfo, VocabularyBook
-from src.core.vocabulary_book_manager import VocabularyBookManager, logger
+from src.core.vocabulary_book_manager import VocabularyBookManager, logger, InterpretationsMap
 from src.core.word_query_service import WordQueryService
 from src.ui.ui_utils import MessageBox, FocusLineEdit
-from src.core.word_entry import WordEntry
+from src.core.word_entry import WordEntry, PartOfSpeech
 
 
 class WordManagerUI(QMainWindow):
@@ -85,7 +85,19 @@ class WordManagerUI(QMainWindow):
         self.widget_word_list.setItemWidget(item, word_ui)
 
     def add_word(self):
-        pass
+        try:
+            dlg = AddWordDialog(self)
+            if dlg.exec_() == QDialog.Accepted:
+                word_entry = dlg.values()
+                if not word_entry:
+                    return
+            else:
+                return
+            logger.INFO(f"Get word entry: {word_entry}")
+            self.book.add_word(word_entry)
+            self.add_word_to_ui(word_entry.word, self.get_first_interpretation(word_entry.interpretations))
+        except Exception as e:
+            logger.INFO(f"Add word failed, error: {e}")
 
     def delete_word(self):
         pass
@@ -113,12 +125,13 @@ class WordManagerUI(QMainWindow):
         for word_entry in word_entry_list:
             dict_word = word_entry.to_dict()
             dict_interpretations = dict_word["Interpretations"]
-            first_interpretation = ""
-            for value in dict_interpretations.values():
-                if isinstance(value, str) and value.strip() != "":
-                    first_interpretation = value
-                    break
-            self.add_word_to_ui(word_entry.word, first_interpretation)
+            self.add_word_to_ui(word_entry.word, self.get_first_interpretation(dict_interpretations))
+
+    @staticmethod
+    def get_first_interpretation(dict_interpretations):
+        for value in dict_interpretations.values():
+            if isinstance(value, str) and value.strip() != "":
+                return value
 
     def resizeEvent(self, event: QResizeEvent):
         # if not self.image_label.pixmap():
@@ -152,3 +165,116 @@ class WordUI(QWidget):
         layout_info.addWidget(self.label_word)
         layout_info.addWidget(self.label_definition)
         layout.addWidget(widget_info, 1)
+
+    def remove_self(self):
+        if self.book.delete_vocabulary_book(self.word):
+            row = self.list_widget.row(self.item)
+            self.list_widget.takeItem(row)
+        else:
+            MessageBox("Delete vocabulary book failed.")
+
+class AddWordDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add new word")
+        self.setFixedSize(500,500)
+        self.word_label = QLabel("Word:")
+        self.word_label.setMinimumHeight(50)
+        self.word_line_edit = QLineEdit()
+        self.word_line_edit.setMinimumHeight(50)
+        self.phonetic_uk_line_edit = QLineEdit()
+        self.phonetic_us_line_edit = QLineEdit()
+        self.interpretation_list = QListWidget()
+        self.interpretation_list.setMinimumHeight(500)
+        self.add_add_button()
+
+        form = QFormLayout(self)
+        form.addRow(self.word_label, self.word_line_edit)
+        form.addRow("Phonetic_UK:", self.phonetic_uk_line_edit)
+        form.addRow("Phonetic_US:", self.phonetic_us_line_edit)
+        form.addRow(self.interpretation_list)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def values(self):
+        definition = self.get_definition_dict()
+        definition["Word"] = self.word_line_edit.text()
+        definition["Phonetic_UK"] = self.phonetic_uk_line_edit.text()
+        definition["Phonetic_US"] = self.phonetic_us_line_edit.text()
+        word_entry = WordEntry.from_flat_dict(definition)
+        return word_entry
+
+    def add_add_button(self):
+        item = QListWidgetItem()
+        item_size = QSize(0, 50)
+        item.setSizeHint(item_size)
+
+        button_add = QPushButton("+")
+        button_add.clicked.connect(self.add_definition_to_ui)
+        self.interpretation_list.addItem(item)
+        self.interpretation_list.setItemWidget(item, button_add)
+
+    def add_definition_to_ui(self):
+        item = QListWidgetItem()
+        item_size = QSize(0, 50)
+        item.setSizeHint(item_size)
+        try:
+            definition_ui = self.WordDefinitionEntry(self.interpretation_list, item)
+        except Exception as e:
+            logger.ERROR(f"Add word definition failed. error: {e}")
+            return
+        item.setData(Qt.UserRole, definition_ui)
+        self.interpretation_list.addItem(item)
+        self.interpretation_list.setItemWidget(item, definition_ui)
+
+    def get_definition_dict(self):
+        definition_dict = {}
+        for i in range(self.interpretation_list.count()):
+            list_item = self.interpretation_list.item(i)
+            definition_entry = self.interpretation_list.itemWidget(list_item)
+            if isinstance(definition_entry, self.WordDefinitionEntry):
+                dict_value, value = definition_entry.value()
+                dict_key = InterpretationsMap[dict_value]
+                if dict_key not in definition_dict:
+                    definition_dict[dict_key] = f"{dict_value}. "
+                definition_dict[dict_key] += value + "；"
+        return definition_dict
+
+    class WordDefinitionEntry(QWidget):
+        def __init__(self, list_widget, item, parent=None):
+            super().__init__(parent)
+            self.list_widget = list_widget
+            self.item = item
+            self.combobox_interpretation = QComboBox(self)
+            list_interpretations = InterpretationsMap.keys()
+            self.combobox_interpretation.addItems(list_interpretations)
+            self.combobox_interpretation.setCurrentIndex(0)
+            self.line_edit_definition = QLineEdit()
+            self.button_remove = QPushButton("-")
+            self.button_remove.clicked.connect(self.remove_self)
+
+            layout = QHBoxLayout(self)
+            layout.addWidget(self.combobox_interpretation)
+            layout.addWidget(self.line_edit_definition)
+            layout.addWidget(self.button_remove)
+
+        def value(self):
+            return self.combobox_interpretation.currentText(), self.line_edit_definition.text()
+
+        def remove_self(self):
+            try:
+                row = self.list_widget.row(self.item)
+                self.list_widget.takeItem(row)
+            except Exception as e:
+                logger.ERROR(f"Add word definition failed. error: {e}")
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    vocabulary_book_manager = VocabularyBookManager("default")
+    book_manager_ui = WordManagerUI(vocabulary_book_manager, "50_A")
+    book_manager_ui.show()
+    sys.exit(app.exec_())

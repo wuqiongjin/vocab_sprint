@@ -322,23 +322,24 @@ def split_phonetics(text: str):
     else:
         raise ValueError(f"Invalid phonetic format：{text}")
 
+InterpretationsMap = {
+    "n": PartOfSpeech.NOUN,
+    "v": PartOfSpeech.VERB,
+    "adj": PartOfSpeech.ADJ,
+    "adv": PartOfSpeech.ADV,
+    "prep": PartOfSpeech.PREP,
+    "conj": PartOfSpeech.CONJ,
+    "pron": PartOfSpeech.PRON,
+    "num": PartOfSpeech.NUM,
+    "int": PartOfSpeech.INTJ,
+    "art": PartOfSpeech.ART,
+    "det": PartOfSpeech.DET,
+    "aux": PartOfSpeech.AUX
+}
+
 def detect_definition(text: str):
-    type_mapping = {
-        "n": PartOfSpeech.NOUN,
-        "v": PartOfSpeech.VERB,
-        "adj": PartOfSpeech.ADJ,
-        "adv": PartOfSpeech.ADV,
-        "prep": PartOfSpeech.PREP,
-        "conj": PartOfSpeech.CONJ,
-        "pron": PartOfSpeech.PRON,
-        "num": PartOfSpeech.NUM,
-        "int": PartOfSpeech.INTJ,
-        "art": PartOfSpeech.ART,
-        "det": PartOfSpeech.DET,
-        "aux": PartOfSpeech.AUX
-    }
     text = text.strip()
-    for prefix, definition_type in type_mapping.items():
+    for prefix, definition_type in InterpretationsMap.items():
         if text.startswith(prefix):
             return definition_type
     return PartOfSpeech.OTHERS
