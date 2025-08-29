@@ -45,7 +45,7 @@ class WordQueryService:
         # Build indexes
         self.build_indexes()
         # register callback to rebuild indexes when word_entry_manager is updated
-        self.word_entry_manager.add_callback(self.build_indexes())
+        self.word_entry_manager.add_callback(self.build_indexes)
 
     def build_indexes(self):
         """
@@ -173,7 +173,6 @@ class WordQueryService:
                             self.search_results_callback(results)
             except:
                 # Timeout is expected, continue loop
-                logger.DEBUG("No query results in queue")
                 pass
 
     def start_realtime_search(self, callback: Callable[[List[WordEntry]], None]):
@@ -250,5 +249,5 @@ class WordQueryService:
         """Shutdown query service and release resources"""
         self.stop_realtime_search()
         self.executor.shutdown(wait=False)
-        self.word_entry_manager.remove_callback(self.build_indexes())
+        self.word_entry_manager.remove_callback(self.build_indexes)
         logger.INFO("WordQueryService shutdown")

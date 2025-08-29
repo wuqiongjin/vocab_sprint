@@ -1,6 +1,6 @@
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QDialogButtonBox, QHBoxLayout, QVBoxLayout, QLabel, QDialog
+from PyQt5.QtWidgets import QDialogButtonBox, QHBoxLayout, QVBoxLayout, QLabel, QDialog, QLineEdit
 
 
 class MessageBox(QDialog):
@@ -33,3 +33,15 @@ class MessageBox(QDialog):
         layout.addStretch()
         layout.addLayout(layout_center_button)
         self.exec_()
+
+class FocusLineEdit(QLineEdit):
+    focus_in  = pyqtSignal()
+    focus_out = pyqtSignal()
+
+    def focusInEvent(self, e):
+        super().focusInEvent(e)
+        self.focus_in.emit()
+
+    def focusOutEvent(self, e):
+        super().focusOutEvent(e)
+        self.focus_out.emit()
