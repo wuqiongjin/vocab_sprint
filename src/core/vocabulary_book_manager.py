@@ -334,7 +334,8 @@ InterpretationsMap = {
     "int": PartOfSpeech.INTJ,
     "art": PartOfSpeech.ART,
     "det": PartOfSpeech.DET,
-    "aux": PartOfSpeech.AUX
+    "aux": PartOfSpeech.AUX,
+    "other": PartOfSpeech.OTHERS
 }
 
 def detect_definition(text: str):
