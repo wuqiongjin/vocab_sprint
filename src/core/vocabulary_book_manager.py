@@ -96,7 +96,7 @@ class VocabularyBookManager:
             return False
 
         for word in list_words:
-            book.add_word(word)
+            book.add_word(word, True)
         return True
 
     def load_vocabulary_book(self, book_info):
@@ -342,12 +342,16 @@ def detect_definition(text: str):
     text = text.strip()
     for prefix, definition_type in InterpretationsMap.items():
         if text.startswith(prefix):
-            return definition_type
-    return PartOfSpeech.OTHERS
+            temp_text = text[len(prefix):].strip()
+            if temp_text.startswith("."):
+                return definition_type, temp_text[1:].strip()
+            return definition_type, temp_text
+    return PartOfSpeech.OTHERS, text
 
 def split_definition(text: str):
     list_def = text.split('||')
     dict_def = {}
     for definition in list_def:
-        dict_def[detect_definition(definition)] = definition
+        key, content = detect_definition(definition)
+        dict_def[key] = content
     return dict_def

@@ -57,9 +57,9 @@ class VocabularyBook:
             result = []
         return result
 
-    def add_word(self, word: WordEntry):
+    def add_word(self, word: WordEntry, force=False):
         try:
-            if self.vocabulary_book_info.type == BookType.SYSTEM:
+            if self.vocabulary_book_info.type == BookType.SYSTEM and not force:
                 return False
             result = self.word_entry_manager.add_word_entry(word)
         except BaseError as e:
@@ -74,5 +74,15 @@ class VocabularyBook:
             result = self.word_entry_manager.remove_word_entry(word)
         except BaseError as e:
             logger.ERROR(f"Delete word {word} error, message: {e}")
+            result = False
+        return result
+
+    def modify_word(self, word, word_entry):
+        try:
+            if self.vocabulary_book_info.type == BookType.SYSTEM:
+                return False
+            result = self.word_entry_manager.update_word_entry(word, word_entry)
+        except BaseError as e:
+            logger.ERROR(f"Modify word {word} error, message: {e}")
             result = False
         return result
