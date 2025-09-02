@@ -90,7 +90,8 @@ class BookManagerUI(QMainWindow):
         logger.INFO(f"Create vocabulary book.")
         if self.book_manager.create_vocabulary_book(book_info):
             logger.INFO(f"Create book success, name: {name} description: {desc}.")
-            self.add_book_to_ui(name, desc, BookType.USER)
+            book = self.book_manager.get_book(name)
+            self.add_book_to_ui(book)
         else:
             MessageBox(f"\nCreate a new vocabulary book failed! \n\nThere is already a book called:\n\n{name}\n", "Error:")
 
@@ -111,7 +112,8 @@ class BookManagerUI(QMainWindow):
 
         if self.book_manager.create_vocabulary_book_from_data(book_info, path):
             logger.INFO(f"Load book success, name: {name} description: {desc}.")
-            self.add_book_to_ui(name, desc, BookType.USER)
+            book = self.book_manager.get_book(name)
+            self.add_book_to_ui(book)
         else:
             MessageBox(f"\nCreate a new vocabulary book failed! \n\nThere is already a book called:\n\n{name}\n", "Error:")
 
