@@ -15,16 +15,16 @@ from src.core.word_entry import WordEntry, PartOfSpeech
 class WordManagerUI(QMainWindow):
     data_ready = pyqtSignal(list)
 
-    def __init__(self, book_manager: VocabularyBookManager, book_name):
+    def __init__(self, book_manager_ui, book: VocabularyBook):
         super().__init__()
-        self.book_manager = book_manager
-        self.book: VocabularyBook = book_manager.get_book(book_name)
+        self.book_manager_ui = book_manager_ui
+        self.book: VocabularyBook = book
         self.query_service = None
         if self.book is None:
             return
         # 标题图标和窗口大小
         self.setFixedSize(600, 850)
-        self.setWindowTitle(book_name)
+        self.setWindowTitle(self.book.get_book_info().description)
         self.setWindowIcon(QIcon("ico.ico"))
         # 窗口置中
         screen_geometry = QApplication.desktop().screenGeometry()
@@ -75,6 +75,11 @@ class WordManagerUI(QMainWindow):
         if self.book.get_book_info().type != BookType.SYSTEM:
             layout_global.addWidget(group_function)
         self.setCentralWidget(widget_global)
+
+    def closeEvent(self, event):
+        if self.book_manager_ui:
+            self.book_manager_ui.show()
+        event.accept()
 
     def init_word_list(self):
         word_list = self.book.get_all_words().values()
@@ -313,7 +318,6 @@ class WordDialog(QDialog):
             definition_entry = self.interpretation_list.itemWidget(list_item)
             if isinstance(definition_entry, self.WordDefinitionEntry):
                 dict_value, value = definition_entry.value()
-                logger.CRITICAL("[" + value + "]")
                 if value.strip() == "":
                     logger.CRITICAL("value is empty")
                     continue
@@ -365,11 +369,3 @@ class WordDialog(QDialog):
                 self.list_widget.takeItem(row)
             except Exception as e:
                 logger.ERROR(f"Add word definition failed. error: {e}")
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    vocabulary_book_manager = VocabularyBookManager("default")
-    book_manager_ui = WordManagerUI(vocabulary_book_manager, "50A3")
-    book_manager_ui.show()
-    sys.exit(app.exec_())

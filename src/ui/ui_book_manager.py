@@ -6,7 +6,9 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont, QPixmap, QResizeEvent,  QIcon
 from PyQt5.QtCore import QSize, Qt
 
+from src.core.vocabulary_book import VocabularyBook
 from src.ui.ui_utils import MessageBox
+from src.ui.ui_word_manager import WordManagerUI
 from src.utils.exceptions import BaseError
 from src.utils.logger import Logger
 from src.core.vocabulary_book_manager import VocabularyBookManager, VocabularyBookInfo, BookType, ExportType
@@ -24,6 +26,7 @@ class BookManagerUI(QMainWindow):
         self.setFixedSize(500, 700)
         self.setWindowTitle("Vocabulary")
         self.setWindowIcon(QIcon("ico.ico"))
+        self.word_manager_ui = None
         # 窗口置中
         screen_geometry = QApplication.desktop().screenGeometry()
         x = (screen_geometry.width() - self.width()) // 2
@@ -62,15 +65,14 @@ class BookManagerUI(QMainWindow):
 
     def init_book_list(self):
         for book in self.book_manager.get_all_book().values():
-            book_info: VocabularyBookInfo = book.get_book_info()
-            self.add_book_to_ui(book_info.name, book_info.description, book_info.type)
+            self.add_book_to_ui(book)
 
-    def add_book_to_ui(self, name: str, desc: str, book_type: BookType):
+    def add_book_to_ui(self, book):
         item = QListWidgetItem()
         item_size = QSize(0, 100)
         item.setSizeHint(item_size)
 
-        vocabulary_book_ui = VocabularyBookUI(name, desc, item_size, self.widget_book_list, item, self.book_manager)
+        vocabulary_book_ui = VocabularyBookUI(book, self, self.widget_book_list, item)
         self.widget_book_list.addItem(item)
         self.widget_book_list.setItemWidget(item, vocabulary_book_ui)
 
@@ -143,12 +145,16 @@ class BookManagerUI(QMainWindow):
         super().resizeEvent(event)
 
 class VocabularyBookUI(QWidget):
-    def __init__(self, name, desc, size, list_widget, item, book_manager):
+    def __init__(self, book: VocabularyBook, book_manager_ui, list_widget, item):
         super().__init__()
-        self.name = name
+        self.book = book
+        book_info = self.book.get_book_info()
+        self.name = book_info.name
+        self.desc = book_info.description
+        self.book_manager_ui = book_manager_ui
+        self.book_manager = book_manager_ui.book_manager
         self.list_widget = list_widget
         self.item = item
-        self.book_manager = book_manager
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -163,13 +169,13 @@ class VocabularyBookUI(QWidget):
         widget_info = QWidget()
         widget_info.setFixedWidth(300)
         layout_info = QVBoxLayout(widget_info)
-        self.label_name = QLabel(name)
+        self.label_name = QLabel(self.name)
         font_name = QFont()
         font_name.setFamily("Consolas")
         font_name.setPointSize(12)
         font_name.setBold(True)
         self.label_name.setFont(font_name)
-        self.label_desc = QLabel(desc)
+        self.label_desc = QLabel(self.desc)
         self.label_desc.setStyleSheet("color: grey;")
         layout_info.addWidget(self.label_name)
         layout_info.addWidget(self.label_desc)
@@ -191,7 +197,9 @@ class VocabularyBookUI(QWidget):
         layout.addWidget(widget_button_field)
 
     def selected(self):
-        pass
+        self.book_manager_ui.hide()
+        self.book_manager_ui.word_manager_ui = WordManagerUI(self.book_manager_ui, self.book)
+        self.book_manager_ui.word_manager_ui.show()
 
     def remove_self(self):
         if self.book_manager.delete_vocabulary_book(self.name):
